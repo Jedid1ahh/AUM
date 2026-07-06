@@ -6,6 +6,7 @@ Handles universe save files with multiple slots.
 import os
 import json
 import shutil
+import sqlite3
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from models.save_file import SaveMetadata, UniverseSnapshot
