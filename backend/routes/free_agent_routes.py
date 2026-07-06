@@ -1871,7 +1871,7 @@ def _tell_for_round(session, offer):
         return "They seem genuinely interested. Push a bit more to close."
 
 
-@free_agent_bp.route('/api/negotiation/start', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/start', methods=['POST'])
 def api_negotiation_start():
     """
     Step 134: Start a new negotiation session.
@@ -1931,7 +1931,7 @@ def api_negotiation_start():
         return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
-@free_agent_bp.route('/api/negotiation/<session_id>/probability', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/<session_id>/probability', methods=['POST'])
 def api_negotiation_probability(session_id):
     """
     Step 134/137: Calculate live acceptance probability for current offer terms.
@@ -1991,7 +1991,7 @@ def api_negotiation_probability(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@free_agent_bp.route('/api/negotiation/<session_id>/offer', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/<session_id>/offer', methods=['POST'])
 def api_negotiation_offer(session_id):
     """
     Step 134-140: Submit a round offer. Returns accepted / countered / rejected.
@@ -2104,7 +2104,7 @@ def api_negotiation_offer(session_id):
         return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
-@free_agent_bp.route('/api/negotiation/<session_id>/counter-accept', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/<session_id>/counter-accept', methods=['POST'])
 def api_negotiation_counter_accept(session_id):
     """
     Step 136: Player accepts the FA's counter-offer.
@@ -2149,7 +2149,7 @@ def api_negotiation_counter_accept(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@free_agent_bp.route('/api/negotiation/<session_id>/pause', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/<session_id>/pause', methods=['POST'])
 def api_negotiation_pause(session_id):
     """
     Step 139: Walk away / pause negotiations temporarily.
@@ -2177,7 +2177,7 @@ def api_negotiation_pause(session_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@free_agent_bp.route('/api/negotiation/<session_id>/third-party', methods=['POST'])
+@free_agent_bp.route('/api/free-agents/legacy-negotiation/<session_id>/third-party', methods=['POST'])
 def api_negotiation_third_party(session_id):
     """
     Step 141: Bring in a third-party ally (roster member) to vouch for the promotion.

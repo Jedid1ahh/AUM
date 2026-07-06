@@ -31,6 +31,7 @@ from economy.negotiation import (
     PPVBonusTier,
     IncentiveClause,
 )
+from services.free_agent_signing_service import finalize_free_agent_signing
 
 negotiation_bp = Blueprint('negotiation', __name__)
 
@@ -454,41 +455,18 @@ def _sign_free_agent(session, offer: NegotiationOffer) -> dict:
     Convert an accepted negotiation offer into an actual roster signing.
     Deducts signing bonus from balance, adds wrestler to universe.
     """
-    try:
-        free_agent_pool = get_free_agent_pool()
-        universe        = get_universe()
-        database        = get_database()
+    result = finalize_free_agent_signing(
+        free_agent_pool=get_free_agent_pool(),
+        universe=get_universe(),
+        database=get_database(),
+        free_agent_id=session.fa_id,
+        offer=offer,
+    )
 
-        fa = free_agent_pool.get_free_agent_by_id(session.fa_id) if free_agent_pool else None
-        if not fa:
-            return {'success': False, 'error': 'Free agent no longer available'}
-
-        # Deduct signing bonus
-        if offer.signing_bonus > 0:
-            state   = database.get_game_state()
-            balance = state.get('balance', 0)
-            if balance < offer.signing_bonus:
-                return {'success': False, 'error': f'Insufficient funds for signing bonus (${offer.signing_bonus:,})'}
-            database.update_game_state(balance=balance - offer.signing_bonus)
-
-        # Remove from free agent pool (if pool supports it)
-        if hasattr(free_agent_pool, 'remove_free_agent'):
-            free_agent_pool.remove_free_agent(session.fa_id)
-
-        # Close session
+    if result.get('success'):
         negotiation_engine.close_session(session.session_id)
 
-        return {
-            'success': True,
-            'wrestler_name': session.wrestler_name,
-            'salary': offer.salary_per_show,
-            'contract_weeks': offer.contract_weeks,
-            'signing_bonus': offer.signing_bonus,
-            'message': f"🎉 {session.wrestler_name} signed for ${offer.salary_per_show:,}/show × {offer.contract_weeks} weeks!"
-        }
-
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
+    return result
 
 
 def _opening_guidance(session) -> str:
