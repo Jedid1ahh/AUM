@@ -3256,7 +3256,7 @@ def _get_ineligibility_reasons(wrestler, storyline_engine) -> List[str]:
     return reasons
 
 
-def _save_storyline_to_db(database, storyline: 'ContractStoryline'):
+def _save_storyline_to_db(database, storyline):
     """Save storyline to database"""
     cursor = database.conn.cursor()
     
@@ -3316,7 +3316,7 @@ def _save_storyline_to_db(database, storyline: 'ContractStoryline'):
     ))
 
 
-def _update_storyline_in_db(database, storyline: 'ContractStoryline'):
+def _update_storyline_in_db(database, storyline):
     """Update existing storyline in database"""
     cursor = database.conn.cursor()
     

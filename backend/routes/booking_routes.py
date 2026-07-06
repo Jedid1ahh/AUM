@@ -1358,15 +1358,17 @@ def calculate_show_financials(show_type: str, overall_rating: float,
         'minor_ppv': 75,
         'major_ppv': 100
     }.get(show_type, 50)
-    try:
-        cursor = database.conn.cursor()
-        cursor.execute("SELECT show_ticket_prices_json FROM finance_settings WHERE id = 1")
-        row = cursor.fetchone()
-        if row and row[0]:
-            prices = json.loads(row[0])
-            ticket_price = int(prices.get(show_type, ticket_price))
-    except Exception:
-        pass
+    database = get_database()
+    if database:
+        try:
+            cursor = database.conn.cursor()
+            cursor.execute("SELECT show_ticket_prices_json FROM finance_settings WHERE id = 1")
+            row = cursor.fetchone()
+            if row and row[0]:
+                prices = json.loads(row[0])
+                ticket_price = int(prices.get(show_type, ticket_price))
+        except Exception:
+            pass
     
     revenue = attendance * ticket_price
     
