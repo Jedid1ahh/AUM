@@ -250,7 +250,8 @@ class AICreativeDirector:
                 all_titles,
                 active_feuds,
                 upcoming_ppvs,
-                card_position=target_matches
+                card_position=target_matches,
+                universe_state=universe_state,
             )
             
             if main_event:
@@ -483,13 +484,14 @@ class AICreativeDirector:
         all_titles: List[Championship],
         feuds: List[Feud],
         upcoming_ppvs: List[ScheduledShow],
-        card_position: int
+        card_position: int,
+        universe_state=None,
     ) -> Optional[MatchDraft]:
         """Book the main event based on show type and circumstances"""
         
         # Major PPV main events
         if show.is_ppv and show.tier == 'major':
-            return self._book_major_ppv_main_event(show, available, brand_titles, all_titles, feuds, card_position)
+            return self._book_major_ppv_main_event(show, available, brand_titles, all_titles, feuds, card_position, universe_state)
         
         # Minor PPV main events
         elif show.is_ppv:
@@ -506,7 +508,8 @@ class AICreativeDirector:
         brand_titles: List[Championship],
         all_titles: List[Championship],
         feuds: List[Feud],
-        card_position: int
+        card_position: int,
+        universe_state=None,
     ) -> Optional[MatchDraft]:
         """Book main event for major PPVs (Victory Dome, Summer Slamfest, etc.)"""
         

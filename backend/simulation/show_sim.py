@@ -41,6 +41,7 @@ from models.championship import Championship
 from simulation.match_sim import match_simulator
 from economy.finance import finance_calculator
 from creative.storylines import storyline_engine
+from persistence.injury_db import save_return_angle
 
 
 class ShowSimulator:

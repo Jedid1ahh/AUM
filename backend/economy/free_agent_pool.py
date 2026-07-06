@@ -634,6 +634,28 @@ class FreeAgentPoolManager:
     def get_free_agent_by_id(self, fa_id: str) -> Optional[FreeAgent]:
         """Get a specific free agent"""
         return self._free_agents.get(fa_id)
+
+    def remove_free_agent(self, fa_id: str, promotion: str = "Ring of Champions") -> bool:
+        """Mark a free agent as signed and remove them from the in-memory pool."""
+        if fa_id not in self._free_agents:
+            return False
+
+        try:
+            from persistence.free_agent_db import mark_free_agent_signed
+
+            state = self.db.get_game_state() if hasattr(self.db, "get_game_state") else {}
+            mark_free_agent_signed(
+                self.db,
+                fa_id,
+                promotion,
+                state.get("current_year", 1),
+                state.get("current_week", 1),
+            )
+        except Exception:
+            pass
+
+        self._free_agents.pop(fa_id, None)
+        return True
     
     def get_free_agent_by_wrestler_id(self, wrestler_id: str) -> Optional[FreeAgent]:
         """Find a free agent by their original wrestler ID"""
