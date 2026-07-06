@@ -5,9 +5,9 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from economy.free_agent_pool import FreeAgentPoolManager
 from economy.negotiation import NegotiationOffer
 from models.free_agent import FreeAgent, FreeAgentSource, FreeAgentVisibility
+from models.free_agent_pool import FreeAgentPool
 from models.free_agent_moods import FreeAgentMood
 from persistence.database import Database
 from persistence.free_agent_db import create_free_agent_tables, save_free_agent
@@ -57,7 +57,7 @@ class FreeAgentSigningServiceTests(unittest.TestCase):
         )
         save_free_agent(self.database, free_agent)
 
-        pool = FreeAgentPoolManager(self.database)
+        pool = FreeAgentPool(self.database)
         offer = NegotiationOffer(salary_per_show=15000, contract_weeks=78)
         offer.signing_bonus = 25000
 

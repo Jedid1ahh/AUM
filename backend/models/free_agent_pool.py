@@ -94,6 +94,29 @@ class FreeAgentPool:
             if fa.id == fa_id:
                 return fa
         return None
+
+    def remove_free_agent(self, fa_id: str, promotion: str = "Ring of Champions") -> bool:
+        """Mark a free agent signed and remove them from the active in-memory list."""
+        free_agent = self.get_free_agent_by_id(fa_id)
+        if not free_agent:
+            return False
+
+        try:
+            state = self.db.get_game_state() if hasattr(self.db, "get_game_state") else {}
+            mark_free_agent_signed(
+                self.db,
+                fa_id,
+                promotion,
+                state.get("current_year", 1),
+                state.get("current_week", 1),
+            )
+        except Exception:
+            pass
+
+        self.available_free_agents = [
+            fa for fa in self.available_free_agents if fa.id != fa_id
+        ]
+        return True
     
     def get_discovered_free_agents(self) -> List[FreeAgent]:
         """Get all free agents that have been discovered"""
