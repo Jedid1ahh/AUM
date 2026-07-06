@@ -17,6 +17,24 @@ def get_universe():
     return current_app.config['UNIVERSE']
 
 
+def _normalize_caw_payload(data):
+    """Accept older frontend payload shapes while keeping backend validation strict."""
+    normalized = dict(data or {})
+
+    numeric_fields = [
+        'age', 'brawling', 'technical', 'speed', 'mic', 'psychology',
+        'stamina', 'salary_per_show', 'contract_weeks', 'years_experience'
+    ]
+    for field in numeric_fields:
+        if field in normalized and normalized[field] not in (None, ''):
+            try:
+                normalized[field] = int(normalized[field])
+            except (TypeError, ValueError):
+                pass
+
+    return normalized
+
+
 @caw_bp.route('/api/caw/presets')
 def api_get_caw_presets():
     try:
@@ -39,7 +57,7 @@ def api_validate_caw():
     try:
         from models.caw import CAWValidator, CAWFactory
         
-        data = request.get_json()
+        data = _normalize_caw_payload(request.get_json())
         
         is_valid, errors = CAWValidator.validate_all(data)
         
@@ -71,7 +89,7 @@ def api_create_wrestler():
     try:
         from models.caw import CAWValidator, CAWFactory
         
-        data = request.get_json()
+        data = _normalize_caw_payload(request.get_json())
         
         print(f"\n{'='*60}")
         print(f"🎨 CREATE-A-WRESTLER REQUEST")
@@ -168,7 +186,7 @@ def api_calculate_overall():
     try:
         from models.caw import CAWFactory
         
-        data = request.get_json()
+        data = _normalize_caw_payload(request.get_json())
         
         overall = CAWFactory.calculate_overall_preview(data)
         suggested_salary = CAWFactory.get_suggested_salary(
@@ -199,7 +217,6 @@ def api_create_random_wrestler():
         gender = data.get('gender', random.choice(['Male', 'Female']))
         brand = data.get('primary_brand', random.choice(['ROC Alpha', 'ROC Velocity', 'ROC Vanguard']))
         role = data.get('role', random.choice(['Upper Midcard', 'Midcard', 'Lower Midcard']))
-        alignment = data.get('alignment', random.choice(['Face', 'Heel', 'Tweener']))
         
         first_names_male = ['Jake', 'Marcus', 'Tyler', 'Ryan', 'Chris', 'Alex', 'Jordan', 'Max', 'Cole', 'Finn']
         first_names_female = ['Luna', 'Ember', 'Jade', 'Phoenix', 'Storm', 'Nova', 'Raven', 'Blaze', 'Ivy', 'Sky']
@@ -222,7 +239,7 @@ def api_create_random_wrestler():
             'name': name,
             'age': random.randint(22, 38),
             'gender': gender,
-            'alignment': alignment,
+            'alignment': 'Neutral',
             'role': role,
             'primary_brand': brand,
             'brawling': random.randint(attr_min, attr_max),
@@ -326,7 +343,7 @@ def api_test_create_sample_wrestler():
             'name': sample_name,
             'age': 28,
             'gender': 'Male',
-            'alignment': 'Face',
+            'alignment': 'Neutral',
             'role': 'Midcard',
             'primary_brand': 'ROC Alpha',
             'brawling': 70,

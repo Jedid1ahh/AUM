@@ -60,7 +60,7 @@ class MatchSimulator:
         if match_type in ['battle_royal', 'rumble', 'casino_battle_royal']:
             return self._simulate_battle_royal_match(match_draft, side_a_wrestlers, side_b_wrestlers, universe_state)
         
-        elif match_type in ['triple_threat', 'fatal_4way']:
+        elif match_type in ['triple_threat', 'fatal_4way', 'elimination_chamber']:
             return self._simulate_multi_competitor_match(match_draft, side_a_wrestlers, side_b_wrestlers, universe_state)
         
         elif match_type in ['triple_threat_tag', 'fatal_4way_tag']:
@@ -109,9 +109,21 @@ class MatchSimulator:
         
         # FIX: Determine winner based on booked_winner OR booking bias
         if match_draft.booked_winner:
-            # Use the explicitly booked winner
-            winner_side = match_draft.booked_winner
-            print(f"      📌 Using booked winner: {winner_side}")
+            if match_draft.booked_winner in ('side_a', 'side_b', 'draw', 'no_contest'):
+                winner_side = match_draft.booked_winner
+            elif match_draft.booked_winner in [w.id for w in side_a_wrestlers]:
+                winner_side = 'side_a'
+            elif match_draft.booked_winner in [w.id for w in side_b_wrestlers]:
+                winner_side = 'side_b'
+            else:
+                print(f"      Booked winner {match_draft.booked_winner} not found, using bias")
+                winner_side = self._determine_winner(
+                    side_a_rating,
+                    side_b_rating,
+                    match_draft.booking_bias,
+                    match_draft.importance
+                )
+            print(f"      Using booked winner side: {winner_side}")
         else:
             # Use the original logic
             winner_side = self._determine_winner(
@@ -199,16 +211,20 @@ class MatchSimulator:
         new_champion_name = None
         
         if match_draft.is_title_match and match_draft.title_id:
-            # For title matches, champion is always on side_a, challenger on side_b
-            if winner_side == 'side_b':
+            championship = universe_state.get_championship_by_id(match_draft.title_id) if universe_state else None
+            winning_wrestlers = side_a_wrestlers if winner_side == 'side_a' else side_b_wrestlers
+            winning_ids = [w.id for w in winning_wrestlers]
+            current_holder_id = championship.current_holder_id if championship else None
+
+            if winner_side in ('side_a', 'side_b') and current_holder_id not in winning_ids:
                 title_changed_hands = True
-                # Get the new champion info
-                if side_b_wrestlers:
-                    new_champion_id = side_b_wrestlers[0].id
-                    new_champion_name = side_b_wrestlers[0].name
+                if winning_wrestlers:
+                    new_champion_id = winning_wrestlers[0].id
+                    new_champion_name = " & ".join([w.name for w in winning_wrestlers])
                 print(f"      🏆 TITLE CHANGE: {new_champion_name} is the NEW CHAMPION!")
             else:
-                print(f"      🛡️ Title retained by {side_a_wrestlers[0].name if side_a_wrestlers else 'champion'}")
+                retained_by = championship.current_holder_name if championship else 'champion'
+                print(f"      🛡️ Title retained by {retained_by}")
     
         # Create result
         result = MatchResult(
@@ -260,8 +276,10 @@ class MatchSimulator:
         # Combine all competitors
         all_competitors = side_a_wrestlers + side_b_wrestlers
         
-        if len(all_competitors) < 3:
-            raise ValueError(f"Multi-competitor match needs 3+ wrestlers, got {len(all_competitors)}")
+        required_competitors = 6 if match_draft.match_type == 'elimination_chamber' else 3
+        if len(all_competitors) < required_competitors:
+            match_label = 'Elimination Chamber' if match_draft.match_type == 'elimination_chamber' else 'Multi-competitor match'
+            raise ValueError(f"{match_label} needs {required_competitors}+ wrestlers, got {len(all_competitors)}")
         
         print(f"   🔀 {match_draft.match_type.upper()}: {', '.join([w.name for w in all_competitors])}")
         

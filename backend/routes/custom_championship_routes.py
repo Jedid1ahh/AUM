@@ -324,12 +324,6 @@ def api_retire_championship(title_id):
         if not championship:
             return jsonify({'success': False, 'error': 'Championship not found'}), 404
         
-        if not championship.is_vacant:
-            return jsonify({
-                'success': False,
-                'error': 'Championship must be vacated before retiring'
-            }), 400
-        
         data = request.get_json() if request.is_json else {}
         reason = data.get('reason', 'Championship retired')
         
@@ -391,24 +385,11 @@ def api_delete_championship(title_id):
     universe = get_universe()
     
     try:
-        from persistence.championship_custom_db import get_championship_extended, delete_championship
+        from persistence.championship_custom_db import delete_championship
         
         championship = universe.get_championship_by_id(title_id)
         if not championship:
             return jsonify({'success': False, 'error': 'Championship not found'}), 404
-        
-        extended = get_championship_extended(database, title_id)
-        if not extended or not extended.get('is_custom'):
-            return jsonify({
-                'success': False,
-                'error': 'Cannot delete default championships. Use retire instead.'
-            }), 400
-        
-        if not championship.is_vacant:
-            return jsonify({
-                'success': False,
-                'error': 'Championship must be vacated before deletion'
-            }), 400
         
         title_name = championship.name
         

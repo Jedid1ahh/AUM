@@ -598,9 +598,134 @@
         .hero         { animation: fadeUp .45s ease both; }
         .stat-bar     { animation: fadeUp .45s .08s ease both; }
         .main-grid    { animation: fadeUp .45s .15s ease both; }
+
+        .dynamic-event-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,.78);
+            padding: 1rem;
+        }
+        .dynamic-event-backdrop.active { display: flex; }
+        .dynamic-event-modal {
+            width: min(720px, 100%);
+            background: var(--bg2);
+            border: 1px solid rgba(212,175,55,.42);
+            border-radius: 8px;
+            box-shadow: 0 28px 80px rgba(0,0,0,.72);
+            overflow: hidden;
+        }
+        .dynamic-event-head {
+            background: linear-gradient(90deg, rgba(192,57,43,.28), rgba(212,175,55,.16));
+            border-bottom: 1px solid var(--border-lt);
+            padding: 1rem 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .dynamic-event-kicker {
+            font-family: 'Barlow Condensed', sans-serif;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            font-size: .72rem;
+            color: var(--gold);
+            font-weight: 800;
+        }
+        .dynamic-event-title {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #fff;
+            line-height: 1.05;
+            margin-top: .25rem;
+        }
+        .dynamic-event-close {
+            background: transparent;
+            border: 1px solid var(--border-lt);
+            color: var(--txt-dim);
+            border-radius: 4px;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 auto;
+        }
+        .dynamic-event-body { padding: 1.25rem; }
+        .dynamic-event-summary {
+            color: var(--txt-dim);
+            line-height: 1.45;
+            margin-bottom: 1rem;
+        }
+        .dynamic-event-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+            margin-bottom: 1rem;
+        }
+        .dynamic-event-pill {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            font-size: .7rem;
+            border: 1px solid var(--border-lt);
+            border-radius: 999px;
+            color: var(--txt-dim);
+            padding: .2rem .55rem;
+        }
+        .dynamic-event-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .65rem;
+            margin-top: 1rem;
+        }
+        .dynamic-event-action {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-weight: 800;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            border: 1px solid rgba(212,175,55,.42);
+            color: var(--gold);
+            background: transparent;
+            border-radius: 5px;
+            padding: .55rem .8rem;
+        }
+        .dynamic-event-action:hover { background: rgba(212,175,55,.12); }
+        .dynamic-event-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            align-items: center;
+            color: var(--txt-faint);
+            font-size: .8rem;
+            border-top: 1px solid var(--border);
+            padding: .85rem 1.25rem;
+        }
     </style>
 </head>
 <body>
+
+<div id="dynamicEventBackdrop" class="dynamic-event-backdrop" aria-live="assertive">
+    <div class="dynamic-event-modal" role="dialog" aria-modal="true" aria-labelledby="dynamicEventTitle">
+        <div class="dynamic-event-head">
+            <div>
+                <div class="dynamic-event-kicker" id="dynamicEventKicker">Dynamic Event</div>
+                <div class="dynamic-event-title" id="dynamicEventTitle">Unexpected event</div>
+            </div>
+            <button class="dynamic-event-close" onclick="dismissDynamicEventPopup()" aria-label="Dismiss dynamic event">x</button>
+        </div>
+        <div class="dynamic-event-body">
+            <div class="dynamic-event-summary" id="dynamicEventSummary"></div>
+            <div class="dynamic-event-meta" id="dynamicEventMeta"></div>
+            <div class="dynamic-event-actions" id="dynamicEventActions"></div>
+        </div>
+        <div class="dynamic-event-footer">
+            <span id="dynamicEventFooterText">This event has been saved to the database.</span>
+            <button class="btn-ghost" id="dynamicEventOpenButton" onclick="loadView('simulation-expansion'); dismissDynamicEventPopup(); return false;">Open Event Hub</button>
+        </div>
+    </div>
+</div>
 
 <!-- ══════════════════════════ NAVBAR ══════════════════════════════════════ -->
 <nav class="awum-nav">
@@ -610,6 +735,9 @@
         <div class="nav-links" id="navLinks">
             <a href="#" onclick="loadView('office');return false;" class="nav-office">
                 <i class="bi bi-building-fill"></i> Office
+            </a>
+            <a href="#" onclick="loadView('booker');return false;">
+                <i class="bi bi-magic"></i> Booker AI
             </a>
             <a href="#" onclick="loadView('roster');return false;">
                 <i class="bi bi-people-fill"></i> Roster
@@ -669,6 +797,9 @@
             <a href="#" onclick="loadView('finance');return false;">
                 <i class="bi bi-cash-stack"></i> Finance
             </a>
+            <a href="#" onclick="loadView('media-business');return false;">
+                <i class="bi bi-broadcast"></i> Media
+            </a>
             <a href="#" onclick="loadView('stats');return false;"><i class="bi bi-graph-up"></i> Stats</a>
             <a href="#" onclick="loadView('awards');return false;"><i class="bi bi-star"></i> Awards</a>
 
@@ -687,6 +818,9 @@
             <a href="#" onclick="loadView('evolve');return false;">
                 <i class="bi bi-mortarboard-fill"></i> Evolve
             </a>
+            <a href="#" onclick="loadView('character-system');return false;">
+                <i class="bi bi-person-bounding-box"></i> Character
+            </a>
             <a href="#" onclick="loadView('world-feed');return false;">
                 <i class="bi bi-megaphone-fill"></i> World Feed
             </a>
@@ -698,6 +832,10 @@
             </a>
             <a href="#" onclick="loadView('legacy-expansion');return false;">
                 <i class="bi bi-clock-history"></i> Legacy Hub
+            </a>
+            <a href="#" onclick="loadView('simulation-expansion');return false;">
+                <i class="bi bi-diagram-3"></i> Enterprise Sim
+            </a>
 
             <div class="nav-sep"></div>
 
@@ -880,7 +1018,6 @@
                     <span class="module-desc">Renewals, extensions &amp; releases</span>
                 </a>
 
-                <!-- ★ CONTROVERSY & LOYALTY — FEATURED ★ -->
                 <a class="module-card featured" href="/controversy"
                    style="--card-clr:#E74C3C">
                     <i class="bi bi-shield-exclamation module-icon" style="color:#E74C3C"></i>
@@ -918,6 +1055,13 @@
                     <i class="bi bi-cash-stack module-icon"></i>
                     <span class="module-name">Finance</span>
                     <span class="module-desc">Revenue, expenses &amp; projections</span>
+                </a>
+
+                <a class="module-card" href="#" onclick="loadView('media-business');return false;"
+                   style="--card-clr:#0EA5E9">
+                    <i class="bi bi-broadcast module-icon"></i>
+                    <span class="module-name">Media &amp; Business</span>
+                    <span class="module-desc">TV ratings, networks, social and licensing</span>
                 </a>
 
                 <a class="module-card" href="/stats"
@@ -1136,6 +1280,8 @@ async function loadView(viewName) {
         const html = await response.text();
         content.innerHTML = html;
         executeScripts(content);
+        checkDynamicEventPulse(`view:${viewName}`, 0.02);
+        checkStoryArcAIPulse(`view:${viewName}`, true);
     } catch (error) {
         console.error('Error loading view:', error);
         content.innerHTML = `
@@ -1274,17 +1420,443 @@ async function updateHomepageStats() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+const dynamicEventSeenKey = 'awumDynamicEventsSeen';
+const storyArcReviewSeenKey = 'awumStoryArcReviewsSeen';
+const bookerApprovalSeenKey = 'awumBookerApprovalsSeen';
+const postShowFalloutSeenKey = 'awumPostShowFalloutSeen';
+
+function getDynamicEventSeen() {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(dynamicEventSeenKey) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function rememberDynamicEvent(eventId) {
+    const seen = getDynamicEventSeen();
+    seen.add(eventId);
+    localStorage.setItem(dynamicEventSeenKey, JSON.stringify(Array.from(seen).slice(-100)));
+}
+
+function getStoryArcReviewSeen() {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(storyArcReviewSeenKey) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function rememberStoryArcReview(reviewId) {
+    const seen = getStoryArcReviewSeen();
+    seen.add(reviewId);
+    localStorage.setItem(storyArcReviewSeenKey, JSON.stringify(Array.from(seen).slice(-100)));
+}
+
+function getBookerApprovalSeen() {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(bookerApprovalSeenKey) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function rememberBookerApproval(itemId) {
+    const seen = getBookerApprovalSeen();
+    seen.add(itemId);
+    localStorage.setItem(bookerApprovalSeenKey, JSON.stringify(Array.from(seen).slice(-100)));
+}
+
+function getPostShowFalloutSeen() {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(postShowFalloutSeenKey) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function rememberPostShowFallout(itemId) {
+    const seen = getPostShowFalloutSeen();
+    seen.add(itemId);
+    localStorage.setItem(postShowFalloutSeenKey, JSON.stringify(Array.from(seen).slice(-100)));
+}
+
+function dynamicEventHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function dynamicEventAttr(value) {
+    return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function showDynamicEventPopup(event) {
+    if (!event || !event.id) return;
+    rememberDynamicEvent(event.id);
+
+    const backdrop = document.getElementById('dynamicEventBackdrop');
+    const title = document.getElementById('dynamicEventTitle');
+    const summary = document.getElementById('dynamicEventSummary');
+    const meta = document.getElementById('dynamicEventMeta');
+    const actions = document.getElementById('dynamicEventActions');
+    const footer = document.getElementById('dynamicEventFooterText');
+    const kicker = document.getElementById('dynamicEventKicker');
+    const openButton = document.getElementById('dynamicEventOpenButton');
+    if (!backdrop || !title || !summary || !meta || !actions) return;
+
+    if (kicker) kicker.textContent = 'Dynamic Event';
+    title.textContent = event.title || 'Unexpected dynamic event';
+    summary.textContent = event.summary || 'A persistent event has interrupted the normal flow of the game.';
+    meta.innerHTML = [
+        event.category,
+        event.severity_level,
+        event.urgency,
+        event.brand,
+        `Y${event.year} W${event.week}`
+    ].filter(Boolean).map(value => `<span class="dynamic-event-pill">${dynamicEventHtml(value)}</span>`).join('');
+
+    const options = event.response_options_json || [];
+    actions.innerHTML = options.length
+        ? options.map(option => `
+            <button class="dynamic-event-action" onclick="resolveGlobalDynamicEvent('${dynamicEventAttr(event.id)}', '${dynamicEventAttr(option.key)}')">
+                ${dynamicEventHtml(option.label)}
+            </button>
+        `).join('')
+        : '<button class="dynamic-event-action" onclick="dismissDynamicEventPopup()">Acknowledge</button>';
+
+    if (footer) footer.textContent = 'This event was generated by the simulation and persisted immediately.';
+    if (openButton) {
+        openButton.textContent = 'Open Event Hub';
+        openButton.onclick = () => { loadView('simulation-expansion'); dismissDynamicEventPopup(); return false; };
+    }
+    backdrop.classList.add('active');
+}
+
+function showStoryArcReviewPopup(review) {
+    if (!review || !review.id) return;
+    rememberStoryArcReview(review.id);
+
+    const backdrop = document.getElementById('dynamicEventBackdrop');
+    const title = document.getElementById('dynamicEventTitle');
+    const summary = document.getElementById('dynamicEventSummary');
+    const meta = document.getElementById('dynamicEventMeta');
+    const actions = document.getElementById('dynamicEventActions');
+    const footer = document.getElementById('dynamicEventFooterText');
+    const kicker = document.getElementById('dynamicEventKicker');
+    const openButton = document.getElementById('dynamicEventOpenButton');
+    if (!backdrop || !title || !summary || !meta || !actions) return;
+
+    if (kicker) kicker.textContent = 'Creative AI Review';
+    title.textContent = review.title || 'Storyline review needed';
+    summary.textContent = review.summary || review.ai_recommendation || 'The creative AI has a storyline decision ready for review.';
+    meta.innerHTML = [
+        review.review_type,
+        review.severity,
+        review.source_type,
+        review.due_year && review.due_week ? `Y${review.due_year} W${review.due_week}` : ''
+    ].filter(Boolean).map(value => `<span class="dynamic-event-pill">${dynamicEventHtml(value)}</span>`).join('');
+
+    const options = Array.isArray(review.options_json) ? review.options_json : [];
+    actions.innerHTML = options.length
+        ? options.map(option => {
+            const decision = option.key === 'approve' ? 'approve' : option.key === 'reject' ? 'reject' : 'defer';
+            return `
+                <button class="dynamic-event-action" onclick="decideStoryArcReview('${dynamicEventAttr(review.id)}', '${dynamicEventAttr(decision)}', '${dynamicEventAttr(option.key)}')">
+                    ${dynamicEventHtml(option.label)}
+                </button>
+            `;
+        }).join('')
+        : `<button class="dynamic-event-action" onclick="decideStoryArcReview('${dynamicEventAttr(review.id)}', 'approve', 'approve')">Approve</button>`;
+
+    if (footer) footer.textContent = review.ai_recommendation || 'This review is stored in the story AI queue until resolved.';
+    if (openButton) {
+        openButton.textContent = 'Open Storylines';
+        openButton.onclick = () => { loadView('storylines'); dismissDynamicEventPopup(); return false; };
+    }
+    backdrop.classList.add('active');
+}
+
+function showBookerApprovalPopup(item) {
+    if (!item || !item.id) return;
+    rememberBookerApproval(item.id);
+
+    const backdrop = document.getElementById('dynamicEventBackdrop');
+    const title = document.getElementById('dynamicEventTitle');
+    const summary = document.getElementById('dynamicEventSummary');
+    const meta = document.getElementById('dynamicEventMeta');
+    const actions = document.getElementById('dynamicEventActions');
+    const footer = document.getElementById('dynamicEventFooterText');
+    const kicker = document.getElementById('dynamicEventKicker');
+    const openButton = document.getElementById('dynamicEventOpenButton');
+    if (!backdrop || !title || !summary || !meta || !actions) return;
+
+    if (kicker) kicker.textContent = 'Booker AI';
+    title.textContent = item.title || 'AI booking decision ready';
+    summary.textContent = item.summary || 'The showrunner has a booking decision ready for review.';
+    meta.innerHTML = [
+        item.category,
+        item.priority,
+        item.autonomy_policy,
+        item.deadline_year && item.deadline_week ? `Y${item.deadline_year} W${item.deadline_week}` : ''
+    ].filter(Boolean).map(value => `<span class="dynamic-event-pill">${dynamicEventHtml(value)}</span>`).join('');
+
+    actions.innerHTML = `
+        <button class="dynamic-event-action" onclick="decideBookerApprovalGlobal('${dynamicEventAttr(item.id)}', 'approve')">Approve</button>
+        <button class="dynamic-event-action" onclick="decideBookerApprovalGlobal('${dynamicEventAttr(item.id)}', 'counter')">Counter</button>
+        <button class="dynamic-event-action" onclick="decideBookerApprovalGlobal('${dynamicEventAttr(item.id)}', 'reject')">Reject</button>
+        <button class="dynamic-event-action" onclick="dismissDynamicEventPopup()">Later</button>
+    `;
+
+    if (footer) footer.textContent = item.autonomy_policy === 'auto_if_unanswered'
+        ? 'The AI may execute this if you leave it unanswered.'
+        : 'Major booking calls wait for your approval or counter-pitch.';
+    if (openButton) {
+        openButton.textContent = 'Open Booker AI';
+        openButton.onclick = () => { loadView('booker'); dismissDynamicEventPopup(); return false; };
+    }
+    backdrop.classList.add('active');
+}
+
+function showPostShowFalloutPopup(item) {
+    if (!item || !item.id) return;
+    if (getPostShowFalloutSeen().has(item.id)) return;
+    rememberPostShowFallout(item.id);
+
+    const backdrop = document.getElementById('dynamicEventBackdrop');
+    const title = document.getElementById('dynamicEventTitle');
+    const summary = document.getElementById('dynamicEventSummary');
+    const meta = document.getElementById('dynamicEventMeta');
+    const actions = document.getElementById('dynamicEventActions');
+    const footer = document.getElementById('dynamicEventFooterText');
+    const kicker = document.getElementById('dynamicEventKicker');
+    const openButton = document.getElementById('dynamicEventOpenButton');
+    if (!backdrop || !title || !summary || !meta || !actions) return;
+
+    if (kicker) kicker.textContent = 'Post-Show Fallout';
+    title.textContent = item.title || 'Urgent post-show situation';
+    summary.textContent = item.summary || 'The simulation generated a post-show consequence that needs attention.';
+    meta.innerHTML = [
+        item.item_type,
+        item.urgency,
+        item.show_name,
+        item.year && item.week ? `Y${item.year} W${item.week}` : ''
+    ].filter(Boolean).map(value => `<span class="dynamic-event-pill">${dynamicEventHtml(value)}</span>`).join('');
+
+    actions.innerHTML = `
+        <button class="dynamic-event-action" onclick="decidePostShowFalloutGlobal('${dynamicEventAttr(item.id)}', 'approve')">Approve Response</button>
+        <button class="dynamic-event-action" onclick="decidePostShowFalloutGlobal('${dynamicEventAttr(item.id)}', 'counter')">Counter</button>
+        <button class="dynamic-event-action" onclick="decidePostShowFalloutGlobal('${dynamicEventAttr(item.id)}', 'dismiss')">Later</button>
+    `;
+
+    if (footer) footer.textContent = item.auto_execute_allowed
+        ? 'The AI can move this forward if you let it breathe.'
+        : 'This one should be reviewed before it becomes canon.';
+    if (openButton) {
+        openButton.textContent = 'Open Fallout Desk';
+        openButton.onclick = () => { loadView('recap'); dismissDynamicEventPopup(); return false; };
+    }
+    backdrop.classList.add('active');
+}
+
+function dismissDynamicEventPopup() {
+    const backdrop = document.getElementById('dynamicEventBackdrop');
+    if (backdrop) backdrop.classList.remove('active');
+}
+
+async function resolveGlobalDynamicEvent(eventId, choice) {
+    try {
+        const response = await fetch(`/api/dynamic-events/${encodeURIComponent(eventId)}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ choice })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error?.message || 'Could not resolve dynamic event');
+        dismissDynamicEventPopup();
+        checkDynamicEventPulse('post-resolution', 0, true);
+        checkStoryArcAIPulse('post-dynamic-resolution', true);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function decideStoryArcReview(reviewId, decision, selectedOption) {
+    try {
+        const response = await fetch(`/api/story-arc-ai/reviews/${encodeURIComponent(reviewId)}/decision`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, selected_option: selectedOption })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error?.message || result.error || 'Could not resolve story review');
+        dismissDynamicEventPopup();
+        checkStoryArcAIPulse('post-story-review', true);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function decideBookerApprovalGlobal(itemId, decision) {
+    try {
+        const counterPitch = decision === 'counter'
+            ? (prompt('Counter-pitch to the AI showrunner:', 'Keep the story beat, but change the finish.') || '')
+            : '';
+        const response = await fetch(`/api/booker/approval-queue/${encodeURIComponent(itemId)}/decision`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, counter_pitch: counterPitch, notes: `Handled from global popup: ${decision}` })
+        });
+        const result = await response.json();
+        if (!response.ok || result.error) throw new Error(result.error || 'Could not resolve Booker AI item');
+        dismissDynamicEventPopup();
+        checkBookerAIPulse('post-booker-decision', true);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function decidePostShowFalloutGlobal(itemId, decision) {
+    try {
+        const counterPitch = decision === 'counter'
+            ? (prompt('Counter-pitch the fallout response:', 'Keep the consequence, but change how next week follows up.') || '')
+            : '';
+        const response = await fetch(`/api/booker/post-show/fallout/items/${encodeURIComponent(itemId)}/decision`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, counter_pitch: counterPitch, notes: `Handled from global fallout popup: ${decision}` })
+        });
+        const result = await response.json();
+        if (!response.ok || result.error) throw new Error(result.error || 'Could not resolve post-show fallout');
+        dismissDynamicEventPopup();
+        checkBookerAIPulse('post-show-fallout-decision', true);
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function checkDynamicEventPulse(context = 'global', chance = 0.025, surfaceExisting = false) {
+    try {
+        const response = await fetch('/api/dynamic-events/pulse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context, chance, allow_multiple_open: false })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) return;
+        const seen = getDynamicEventSeen();
+        const candidates = [
+            ...(result.data.events || []),
+            ...(surfaceExisting ? (result.data.open_events || []) : [])
+        ];
+        const event = candidates.find(item => item && item.status === 'open' && !seen.has(item.id));
+        if (event) showDynamicEventPopup(event);
+    } catch (_) {}
+}
+
+async function checkStoryArcAIPulse(context = 'global', surfaceExisting = true) {
+    try {
+        const response = await fetch('/api/story-arc-ai/pulse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context, run_ai: true, limit: surfaceExisting ? 5 : 1 })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) return;
+        const seen = getStoryArcReviewSeen();
+        const reviews = result.data.reviews || [];
+        const review = reviews.find(item => item && item.status === 'pending' && !seen.has(item.id));
+        if (review) showStoryArcReviewPopup(review);
+    } catch (_) {}
+}
+
+async function checkBookerAIPulse(context = 'global', surfaceExisting = true) {
+    try {
+        await fetch('/api/booker/showrunner/weekly', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context, autonomy_level: 'balanced', force: false })
+        });
+        await fetch('/api/booker/approval-queue/auto-resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context })
+        });
+        const response = await fetch('/api/booker/showrunner/dashboard');
+        const dashboard = await response.json();
+        if (!response.ok || dashboard.error) return;
+        const seen = getBookerApprovalSeen();
+        const items = dashboard.pending_approvals || [];
+        const item = items.find(entry => entry && entry.status === 'pending' && !seen.has(entry.id));
+        if (surfaceExisting && item) showBookerApprovalPopup(item);
+    } catch (_) {}
+}
+
+function installDynamicEventFetchInterceptor() {
+    if (window.__dynamicEventFetchInstalled) return;
+    window.__dynamicEventFetchInstalled = true;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+        const response = await originalFetch(...args);
+        try {
+            const url = String(args[0] || '');
+            if (url.includes('/api/show/simulate') || url.includes('/api/booking/run_show')) {
+                response.clone().json().then(data => {
+                    const events = data.dynamic_events?.events || data.show_result?.dynamic_events?.events || [];
+                    const seen = getDynamicEventSeen();
+                    const event = events.find(item => item && item.status === 'open' && !seen.has(item.id));
+                    if (event) showDynamicEventPopup(event);
+                    const falloutReport = data.post_show_fallout?.report || data.show_result?.post_show_fallout || null;
+                    const falloutSeen = getPostShowFalloutSeen();
+                    const urgentFallout = [
+                        ...((falloutReport && falloutReport.urgent_items) || []),
+                        ...((falloutReport && falloutReport.items) || [])
+                    ].find(item => item && item.status === 'open' && ['critical', 'high'].includes(item.urgency) && !falloutSeen.has(item.id));
+                    if (urgentFallout) {
+                        showPostShowFalloutPopup({
+                            ...urgentFallout,
+                            report_id: falloutReport.id,
+                            show_name: falloutReport.show_name,
+                            year: falloutReport.year,
+                            week: falloutReport.week
+                        });
+                    }
+                    checkStoryArcAIPulse('show-simulated', true);
+                    checkBookerAIPulse('show-simulated', true);
+                }).catch(() => {});
+            }
+        } catch (_) {}
+        return response;
+    };
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+    installDynamicEventFetchInterceptor();
     checkConnection();
     updateUniverseStatus();
     updateHomepageStats();
     loadAlertBadge();
     loadAlertsPanel();
+    checkDynamicEventPulse('global', 0.025, true);
+    checkStoryArcAIPulse('global', true);
+    checkBookerAIPulse('global', true);
     setInterval(updateUniverseStatus, 30000);
     setInterval(loadAlertBadge, 30000);
+    setInterval(() => checkDynamicEventPulse('global', 0.025, true), 45000);
+    setInterval(() => checkStoryArcAIPulse('global', true), 60000);
+    setInterval(() => checkBookerAIPulse('global', true), 90000);
 });
 
 window.loadView = loadView;
+window.dismissDynamicEventPopup = dismissDynamicEventPopup;
+window.resolveGlobalDynamicEvent = resolveGlobalDynamicEvent;
+window.checkDynamicEventPulse = checkDynamicEventPulse;
+window.showStoryArcReviewPopup = showStoryArcReviewPopup;
+window.decideStoryArcReview = decideStoryArcReview;
+window.checkStoryArcAIPulse = checkStoryArcAIPulse;
+window.showBookerApprovalPopup = showBookerApprovalPopup;
+window.decideBookerApprovalGlobal = decideBookerApprovalGlobal;
+window.checkBookerAIPulse = checkBookerAIPulse;
+window.showPostShowFalloutPopup = showPostShowFalloutPopup;
+window.decidePostShowFalloutGlobal = decidePostShowFalloutGlobal;
 </script>
 </body>
 </html>

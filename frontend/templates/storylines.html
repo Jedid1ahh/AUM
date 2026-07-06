@@ -46,6 +46,65 @@
         </div>
     </div>
 
+    <!-- Creative AI Planning -->
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-cpu"></i> Creative AI Planning
+            </h5>
+            <div>
+                <button class="btn btn-sm btn-outline-light" id="btnStoryArcPulse">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh AI
+                </button>
+                <button class="btn btn-sm btn-warning ms-2" id="btnStoryArcWeekly">
+                    <i class="bi bi-lightning-charge"></i> Run Story Week
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <div class="ai-story-metric">
+                        <span>Active Arcs</span>
+                        <strong id="aiActiveArcs">0</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="ai-story-metric">
+                        <span>Draft Arcs</span>
+                        <strong id="aiDraftArcs">0</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="ai-story-metric">
+                        <span>Pending Reviews</span>
+                        <strong id="aiPendingReviews">0</strong>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="ai-story-metric">
+                        <span>Calendar Events</span>
+                        <strong id="aiCalendarEvents">0</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-lg-5">
+                    <h6 class="text-muted text-uppercase">Pending Approvals</h6>
+                    <div id="storyArcReviewsPanel" class="ai-story-panel"></div>
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="text-muted text-uppercase">Active AI Arcs</h6>
+                    <div id="storyArcActivePanel" class="ai-story-panel"></div>
+                </div>
+                <div class="col-lg-3">
+                    <h6 class="text-muted text-uppercase">Event Calendar</h6>
+                    <div id="storyArcCalendarPanel" class="ai-story-panel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Active Storylines -->
     <div class="card mb-4">
         <div class="card-header bg-success text-white">
@@ -283,12 +342,66 @@
         margin-right: 0.5rem;
         margin-top: 0.25rem;
     }
+
+    .ai-story-metric {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.9rem 1rem;
+        background: #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .ai-story-metric span {
+        color: #6c757d;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .ai-story-metric strong {
+        font-size: 1.5rem;
+        color: #1a1a2e;
+    }
+
+    .ai-story-panel {
+        min-height: 130px;
+        max-height: 360px;
+        overflow: auto;
+    }
+
+    .ai-story-item {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 0.85rem;
+        margin-bottom: 0.75rem;
+        background: #fff;
+    }
+
+    .ai-story-title {
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+
+    .ai-story-meta {
+        color: #6c757d;
+        font-size: 0.82rem;
+        margin-bottom: 0.45rem;
+    }
+
+    .ai-story-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
 </style>
 
 <script>
     // Storylines View Script
     (function() {
         let storylinesData = [];
+        let storyArcAiData = null;
 
         // Load storylines on view load
         async function loadStorylines() {
@@ -326,6 +439,135 @@
                     </tr>
                 `;
             }
+        }
+
+        async function loadStoryArcAi() {
+            try {
+                const response = await fetch('/api/story-arc-ai/dashboard');
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Failed to load Creative AI');
+                storyArcAiData = result.data;
+                renderStoryArcAi();
+            } catch (error) {
+                const reviews = document.getElementById('storyArcReviewsPanel');
+                if (reviews) reviews.innerHTML = `<div class="text-danger">Creative AI unavailable: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function runStoryArcWeek() {
+            try {
+                const response = await fetch('/api/story-arc-ai/weekly', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ force: true, auto: false })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Failed to run story AI');
+                await loadStoryArcAi();
+                if (window.checkStoryArcAIPulse) window.checkStoryArcAIPulse('storylines-manual', true);
+            } catch (error) {
+                showAlert('Failed to run story AI: ' + error.message, 'danger');
+            }
+        }
+
+        function renderStoryArcAi() {
+            if (!storyArcAiData) return;
+            const summary = storyArcAiData.summary || {};
+            setText('aiActiveArcs', summary.active_arcs || 0);
+            setText('aiDraftArcs', summary.draft_arcs || 0);
+            setText('aiPendingReviews', summary.pending_reviews || 0);
+            setText('aiCalendarEvents', summary.next_calendar_events || 0);
+            renderStoryArcReviews(storyArcAiData.pending_reviews || []);
+            renderStoryArcActive(storyArcAiData.arcs || []);
+            renderStoryArcCalendar(storyArcAiData.calendar || []);
+        }
+
+        function renderStoryArcReviews(reviews) {
+            const panel = document.getElementById('storyArcReviewsPanel');
+            if (!panel) return;
+            if (!reviews.length) {
+                panel.innerHTML = '<p class="text-muted">No pending creative approvals.</p>';
+                return;
+            }
+            panel.innerHTML = reviews.map(review => {
+                const options = Array.isArray(review.options_json) ? review.options_json : [];
+                const buttons = options.length ? options.map(option => {
+                    const decision = option.key === 'approve' ? 'approve' : option.key === 'reject' ? 'reject' : 'defer';
+                    return `<button class="btn btn-sm btn-outline-primary" onclick="window.storyArcDecision('${safeAttr(review.id)}', '${safeAttr(decision)}', '${safeAttr(option.key)}')">${escapeHtml(option.label)}</button>`;
+                }).join('') : `<button class="btn btn-sm btn-primary" onclick="window.storyArcDecision('${safeAttr(review.id)}', 'approve', 'approve')">Approve</button>`;
+                return `
+                    <div class="ai-story-item">
+                        <div class="ai-story-title">${escapeHtml(review.title)}</div>
+                        <div class="ai-story-meta">${escapeHtml(review.review_type)} · ${escapeHtml(review.severity)} · Y${review.due_year || '-'} W${review.due_week || '-'}</div>
+                        <div class="mb-2">${escapeHtml(review.summary)}</div>
+                        <div class="ai-story-actions">${buttons}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderStoryArcActive(arcs) {
+            const panel = document.getElementById('storyArcActivePanel');
+            if (!panel) return;
+            const active = arcs.filter(arc => arc.status === 'active' || arc.status === 'pending_review').slice(0, 8);
+            if (!active.length) {
+                panel.innerHTML = '<p class="text-muted">No AI-managed arcs yet.</p>';
+                return;
+            }
+            panel.innerHTML = active.map(arc => {
+                const health = arc.health || {};
+                return `
+                    <div class="ai-story-item">
+                        <div class="ai-story-title">${escapeHtml(arc.name)}</div>
+                        <div class="ai-story-meta">${escapeHtml(arc.tier || 'unclassified')} · ${escapeHtml(arc.status)} · ${Number(arc.priority_score || 0).toFixed(0)} priority</div>
+                        <div>${escapeHtml(health.recommended_action || arc.premise || 'Tracking active storyline.')}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderStoryArcCalendar(events) {
+            const panel = document.getElementById('storyArcCalendarPanel');
+            if (!panel) return;
+            if (!events.length) {
+                panel.innerHTML = '<p class="text-muted">No planned events.</p>';
+                return;
+            }
+            panel.innerHTML = events.slice(0, 10).map(event => `
+                <div class="ai-story-item">
+                    <div class="ai-story-title">${escapeHtml(event.event_name)}</div>
+                    <div class="ai-story-meta">Y${event.year} W${event.week} · ${escapeHtml(event.tier)}</div>
+                    <div>${escapeHtml(event.strategic_purpose)}</div>
+                </div>
+            `).join('');
+        }
+
+        window.storyArcDecision = async function(reviewId, decision, selectedOption) {
+            try {
+                const response = await fetch(`/api/story-arc-ai/reviews/${encodeURIComponent(reviewId)}/decision`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ decision, selected_option: selectedOption })
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || 'Could not save decision');
+                await loadStoryArcAi();
+            } catch (error) {
+                showAlert('Could not save story AI decision: ' + error.message, 'danger');
+            }
+        };
+
+        function setText(id, value) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        function safeAttr(value) {
+            return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         }
 
         // Update active storylines display
@@ -654,9 +896,12 @@
         document.getElementById('btnCheckTriggers').addEventListener('click', checkTriggers);
         document.getElementById('btnProcessWeek').addEventListener('click', processWeek);
         document.getElementById('btnPreviewSegments').addEventListener('click', previewSegments);
+        document.getElementById('btnStoryArcPulse').addEventListener('click', loadStoryArcAi);
+        document.getElementById('btnStoryArcWeekly').addEventListener('click', runStoryArcWeek);
         
         // Load storylines immediately
         loadStorylines();
+        loadStoryArcAi();
         
         console.log('✅ Storylines view initialized');
     })();

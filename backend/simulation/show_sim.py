@@ -64,6 +64,67 @@ class ShowSimulator:
     
     def __init__(self):
         pass
+
+    def _prepare_elimination_chamber_competitors(
+        self,
+        match_draft,
+        side_a_wrestlers,
+        side_b_wrestlers,
+        universe_state,
+        show_draft,
+    ):
+        if (match_draft.match_type or '').lower() != 'elimination_chamber':
+            return side_a_wrestlers, side_b_wrestlers
+
+        selected = []
+        selected_ids = set()
+        for wrestler in side_a_wrestlers + side_b_wrestlers:
+            if wrestler and wrestler.id not in selected_ids:
+                selected.append(wrestler)
+                selected_ids.add(wrestler.id)
+
+        if len(selected) < 6:
+            gender = (match_draft.gender_division or '').lower()
+            show_brand = getattr(show_draft, 'brand', '')
+            cross_brand = show_brand == 'Cross-Brand'
+            candidates = []
+
+            for wrestler in universe_state.get_active_wrestlers():
+                if wrestler.id in selected_ids:
+                    continue
+                if gender in ('male', 'female') and wrestler.gender.lower() != gender:
+                    continue
+                if not cross_brand and show_brand and wrestler.primary_brand != show_brand:
+                    continue
+                candidates.append(wrestler)
+
+            candidates.sort(
+                key=lambda wrestler: (
+                    getattr(wrestler, 'overall_rating', 0),
+                    getattr(wrestler, 'popularity', 0),
+                ),
+                reverse=True,
+            )
+
+            for wrestler in candidates:
+                selected.append(wrestler)
+                selected_ids.add(wrestler.id)
+                if len(selected) == 6:
+                    break
+
+        if len(selected) < 6:
+            raise ValueError(
+                f"Elimination Chamber requires 6 wrestlers, got {len(selected)}"
+            )
+
+        selected = selected[:6]
+        match_draft.side_a.wrestler_ids = [wrestler.id for wrestler in selected]
+        match_draft.side_a.wrestler_names = [wrestler.name for wrestler in selected]
+        match_draft.side_a.is_tag_team = False
+        match_draft.side_b.wrestler_ids = []
+        match_draft.side_b.wrestler_names = []
+        match_draft.side_b.is_tag_team = False
+        return selected, []
     
     def simulate_show(
         self,
@@ -166,40 +227,32 @@ class ShowSimulator:
         # Get all wrestlers on the card
         wrestlers_on_card = self._get_wrestlers_on_card(show_draft, universe_state)
         
-        # Calculate attendance
         brand_prestige = self._calculate_brand_prestige(show_draft.brand, universe_state)
-        attendance = finance_calculator.calculate_attendance(
+        finance_projection = finance_calculator.project_show_finances(
             show_draft,
+            wrestlers_on_card,
             brand_prestige=brand_prestige,
-            current_balance=universe_state.balance
+            current_balance=universe_state.balance,
+            randomize=True,
         )
-        
-        show_result.total_attendance = attendance
-        
-        # Calculate revenue
-        revenue_breakdown = finance_calculator.calculate_revenue(show_draft, attendance)
-        show_result.total_revenue = revenue_breakdown['total_revenue']
-        
-        # Calculate payroll
-        payroll = finance_calculator.calculate_payroll(wrestlers_on_card)
-        show_result.total_payroll = payroll
-        
-        # Calculate expenses
-        expenses_breakdown = finance_calculator.calculate_expenses(show_draft, payroll)
-        total_expenses = expenses_breakdown['total_expenses']
-        
-        # Calculate net profit
-        net_profit = finance_calculator.calculate_net_profit(
-            show_result.total_revenue,
-            total_expenses
-        )
-        show_result.net_profit = net_profit
-        
-        print(f"   Attendance: {attendance:,}")
+
+        show_result.total_attendance = finance_projection['projected_attendance']
+        show_result.total_revenue = finance_projection['projected_total_revenue']
+        show_result.total_payroll = finance_projection['expense_breakdown']['payroll']
+        show_result.net_profit = finance_projection['projected_net_profit']
+        show_result.revenue_breakdown = finance_projection['revenue_breakdown']
+        show_result.expense_breakdown = finance_projection['expense_breakdown']
+        show_result.profit_projection = finance_projection
+        show_result.profit_warnings = finance_projection['warnings']
+        show_result.profit_recommendations = finance_projection['recommendations']
+
+        print(f"   Attendance: {show_result.total_attendance:,}")
         print(f"   Revenue: ${show_result.total_revenue:,}")
-        print(f"   Payroll: ${payroll:,}")
-        print(f"   Production: ${expenses_breakdown['production']:,}")
-        print(f"   Net: ${net_profit:,} {'📈' if net_profit >= 0 else '📉'}")
+        print(f"   Payroll: ${show_result.total_payroll:,}")
+        print(f"   Production: ${finance_projection['expense_breakdown']['production']:,}")
+        print(f"   Venue: ${finance_projection['expense_breakdown']['venue']:,}")
+        print(f"   Guaranteed Media: ${finance_projection['revenue_breakdown']['guaranteed_media_revenue']:,}")
+        print(f"   Net: ${show_result.net_profit:,} {'📈' if show_result.net_profit >= 0 else '📉'}")
         print()
         
         # ================================================================
@@ -291,6 +344,14 @@ class ShowSimulator:
                 # Filter out None (in case of missing wrestlers)
                 side_a_wrestlers = [w for w in side_a_wrestlers if w]
                 side_b_wrestlers = [w for w in side_b_wrestlers if w]
+
+                side_a_wrestlers, side_b_wrestlers = self._prepare_elimination_chamber_competitors(
+                    match_draft,
+                    side_a_wrestlers,
+                    side_b_wrestlers,
+                    universe_state,
+                    show_draft,
+                )
                 
                 # Handle multi-man matches (all in side_a)
                 if not side_b_wrestlers and side_a_wrestlers:
@@ -523,7 +584,7 @@ class ShowSimulator:
         print(f"✅ Updated stats for {len(wrestlers_in_show)} wrestlers")
         
         # Update universe balance
-        universe_state.balance += net_profit
+        universe_state.balance += show_result.net_profit
         
         # Increment show count
         universe_state.show_count += 1
@@ -932,14 +993,18 @@ class ShowSimulator:
     
     def _get_participant_id(self, participant) -> str:
         """Extract wrestler_id from participant (dict or object)."""
+        if isinstance(participant, str):
+            return participant
         if isinstance(participant, dict):
-            return participant.get('wrestler_id', '')
+            return participant.get('wrestler_id') or participant.get('id') or ''
         return getattr(participant, 'wrestler_id', '')
     
     def _get_participant_name(self, participant) -> str:
         """Extract wrestler_name from participant (dict or object)."""
+        if isinstance(participant, str):
+            return participant
         if isinstance(participant, dict):
-            return participant.get('wrestler_name', 'Unknown')
+            return participant.get('wrestler_name') or participant.get('name') or 'Unknown'
         return getattr(participant, 'wrestler_name', 'Unknown')
     
     def _get_participant_role(self, participant) -> str:
@@ -1186,7 +1251,13 @@ class ShowSimulator:
                 
                 # If title changed hands, use the NEW champion for prestige calculation
                 if match_result.title_changed_hands:
-                    new_champion = winners[0] if winners else None
+                    new_champion_id = getattr(match_result, 'new_champion_id', None)
+                    new_champion_name = getattr(match_result, 'new_champion_name', None)
+                    new_champion = (
+                        universe_state.get_wrestler_by_id(new_champion_id)
+                        if new_champion_id else
+                        (winners[0] if winners else None)
+                    )
                     
                     if not new_champion:
                         print(f"      ⚠️ Cannot process title change - no winner found")
@@ -1260,7 +1331,7 @@ class ShowSimulator:
                         # Award title to new champion
                         title.award_title(
                             wrestler_id=new_champion.id,
-                            wrestler_name=new_champion.name,
+                            wrestler_name=new_champion_name or new_champion.name,
                             show_id=show_result.show_id,
                             show_name=show_result.show_name,
                             year=show_result.year,
@@ -1271,10 +1342,11 @@ class ShowSimulator:
                         title_brand = getattr(title, 'assigned_brand', None)
                         if title_brand and title_brand != 'Cross-Brand':
                             try:
-                                new_champion.primary_brand = title_brand
-                                if hasattr(new_champion, 'current_brand'):
-                                    new_champion.current_brand = title_brand
-                                universe_state.save_wrestler(new_champion)
+                                for champ_member in winners:
+                                    champ_member.primary_brand = title_brand
+                                    if hasattr(champ_member, 'current_brand'):
+                                        champ_member.current_brand = title_brand
+                                    universe_state.save_wrestler(champ_member)
                                 print(f"      🔄 Brand alignment: {new_champion.name} moved to {title_brand} as champion")
                             except Exception as e:
                                 print(f"      ⚠️ Failed to align champion brand for {new_champion.name}: {e}")
@@ -1300,10 +1372,10 @@ class ShowSimulator:
                         
                         show_result.add_event(
                             'title_change',
-                            f"🏆 NEW CHAMPION: {new_champion.name} won the {title.name}!"
+                            f"🏆 NEW CHAMPION: {new_champion_name or new_champion.name} won the {title.name}!"
                         )
                         
-                        print(f"      🏆 TITLE CHANGE: {new_champion.name} wins {title.name}")
+                        print(f"      🏆 TITLE CHANGE: {new_champion_name or new_champion.name} wins {title.name}")
                 
                 # Update prestige if we have a champion
                 if current_champion:
@@ -1535,6 +1607,16 @@ class ShowSimulator:
         # Create new feud from attacks or betrayals
         segment_type = self._get_segment_type(segment_draft)
         participants = self._get_segment_participants(segment_draft)
+        purpose = getattr(segment_draft, 'purpose', 'general')
+
+        if purpose in ['build_feud', 'start_feud'] and len(participants) >= 2:
+            self._apply_segment_purpose_to_feud(
+                segment_result,
+                segment_draft,
+                universe_state,
+                show_result,
+                purpose
+            )
         
         if segment_type in ['backstage_attack', 'in_ring_attack', 'betrayal'] and len(participants) >= 2:
             p1_id = self._get_participant_id(participants[0])
@@ -1582,6 +1664,98 @@ class ShowSimulator:
                 f"⭐ MEMORABLE {segment_type.upper()}: {highlight_desc}"
             )
     
+    def _apply_segment_purpose_to_feud(
+        self,
+        segment_result: SegmentResult,
+        segment_draft,
+        universe_state,
+        show_result: ShowResult,
+        purpose: str
+    ):
+        """Make manual segment purpose choices affect the feud system."""
+        participants = [
+            p for p in self._get_segment_participants(segment_draft)
+            if self._get_participant_id(p) not in ['', 'interviewer', 'authority']
+        ]
+        if len(participants) < 2:
+            return
+
+        p1_id = self._get_participant_id(participants[0])
+        p2_id = self._get_participant_id(participants[1])
+        if not p1_id or not p2_id or p1_id == p2_id:
+            return
+
+        p1_name = self._get_participant_name(participants[0])
+        p2_name = self._get_participant_name(participants[1])
+        p1 = universe_state.get_wrestler_by_id(p1_id)
+        p2 = universe_state.get_wrestler_by_id(p2_id)
+        if p1:
+            p1_name = p1.name
+        if p2:
+            p2_name = p2.name
+
+        feud_manager = getattr(universe_state, 'feud_manager', None)
+        if not feud_manager:
+            return
+
+        segment_type = self._get_segment_type(segment_draft)
+        existing_feud = feud_manager.get_feud_between(p1_id, p2_id)
+        change = 15 if purpose == 'start_feud' else 10
+        description = f"{p1_name} and {p2_name} escalated their rivalry in a {segment_type.replace('_', ' ')} segment."
+
+        if existing_feud:
+            existing_feud.add_segment(
+                show_id=segment_result.segment_id,
+                show_name=show_result.show_name,
+                year=show_result.year,
+                week=show_result.week,
+                segment_type=segment_type,
+                description=description,
+                intensity_change=change
+            )
+            universe_state.save_feud(existing_feud)
+            segment_result.feud_intensity_change = max(segment_result.feud_intensity_change or 0, change)
+            show_result.add_event(
+                'feud_heated_up',
+                f"{p1_name} vs {p2_name} heated up after a {segment_type.replace('_', ' ')} segment."
+            )
+            print(f"      FEUD HEATED UP: {p1_name} vs {p2_name} (+{change})")
+        else:
+            from models.feud import FeudType
+
+            initial_intensity = 45 if purpose == 'start_feud' else 35
+            new_feud = feud_manager.create_feud(
+                feud_type=FeudType.PERSONAL,
+                participant_ids=[p1_id, p2_id],
+                participant_names=[p1_name, p2_name],
+                year=show_result.year,
+                week=show_result.week,
+                show_id=show_result.show_id,
+                initial_intensity=initial_intensity
+            )
+            new_feud.add_segment(
+                show_id=segment_result.segment_id,
+                show_name=show_result.show_name,
+                year=show_result.year,
+                week=show_result.week,
+                segment_type=segment_type,
+                description=description,
+                intensity_change=0
+            )
+            universe_state.save_feud(new_feud)
+            segment_result.created_feud = True
+            segment_result.feud_intensity_change = max(segment_result.feud_intensity_change or 0, initial_intensity)
+            show_result.add_event(
+                'feud_started',
+                f"NEW FEUD! {p1_name} vs {p2_name} started after a {segment_type.replace('_', ' ')} segment."
+            )
+            print(f"      NEW FEUD CREATED: {p1_name} vs {p2_name}")
+
+        try:
+            universe_state.db.conn.commit()
+        except Exception as e:
+            print(f"      Could not commit feud segment changes immediately: {e}")
+
     # ====================================================================
     # CONTRACT MANAGEMENT
     # ====================================================================

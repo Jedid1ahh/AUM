@@ -4,6 +4,8 @@ import json
 import uuid
 from datetime import datetime
 from flask import Blueprint, current_app, jsonify, request
+from services.ai_showrunner_service import AIShowrunnerService
+from services.post_show_fallout_service import PostShowFalloutService
 
 booker_bp = Blueprint('booker', __name__)
 
@@ -16,8 +18,43 @@ def get_database():
     return current_app.config['DATABASE']
 
 
+def get_universe():
+    return current_app.config.get('UNIVERSE')
+
+
+def get_showrunner():
+    service = current_app.config.get('AI_SHOWRUNNER_SERVICE')
+    if service is None:
+        service = AIShowrunnerService(get_database())
+        current_app.config['AI_SHOWRUNNER_SERVICE'] = service
+    return service
+
+
+def get_post_show_fallout():
+    service = current_app.config.get('POST_SHOW_FALLOUT_SERVICE')
+    if service is None:
+        service = PostShowFalloutService(get_database())
+        current_app.config['POST_SHOW_FALLOUT_SERVICE'] = service
+    return service
+
+
 def _now_iso() -> str:
     return datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+
+
+def _coerce_int(value, fallback: int) -> int:
+    if value in (None, ""):
+        return fallback
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _request_year_week(data: dict, state: dict) -> tuple[int, int]:
+    year = _coerce_int(data.get('year'), _coerce_int((state or {}).get('current_year'), 1))
+    week = _coerce_int(data.get('week'), _coerce_int((state or {}).get('current_week'), 1))
+    return year, week
 
 
 def _ensure_tables(db):
@@ -188,3 +225,163 @@ def notebook():
     c = db.conn.cursor()
     rows = c.execute('SELECT * FROM creative_notebook_entries ORDER BY created_at DESC').fetchall()
     return jsonify({'total': len(rows), 'entries': [dict(r) for r in rows]})
+
+
+@booker_bp.route('/api/booker/showrunner/dashboard', methods=['GET'])
+def showrunner_dashboard():
+    try:
+        return jsonify(get_showrunner().dashboard())
+    except Exception as exc:
+        current_app.logger.exception("Showrunner dashboard failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/showrunner/weekly', methods=['POST'])
+def run_showrunner_weekly():
+    try:
+        data = request.get_json(silent=True) or {}
+        state = get_database().get_game_state() if hasattr(get_database(), 'get_game_state') else {}
+        year, week = _request_year_week(data, state)
+        result = get_showrunner().run_weekly(
+            year,
+            week,
+            universe=get_universe(),
+            seed=data.get('seed'),
+            force=bool(data.get('force', False)),
+            autonomy_level=str(data.get('autonomy_level', 'balanced')).lower(),
+        )
+        return jsonify(result)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Showrunner weekly run failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/showrunner/latest-booking-draft', methods=['GET'])
+def latest_showrunner_booking_draft():
+    try:
+        return jsonify(get_showrunner().latest_booking_draft())
+    except Exception as exc:
+        current_app.logger.exception("Showrunner latest booking draft failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/showrunner/dark-house-week', methods=['POST'])
+def run_dark_house_week():
+    try:
+        data = request.get_json(silent=True) or {}
+        state = get_database().get_game_state() if hasattr(get_database(), 'get_game_state') else {}
+        year, week = _request_year_week(data, state)
+        return jsonify(get_showrunner().run_dark_house_autopilot(
+            year,
+            week,
+            universe=get_universe(),
+            seed=data.get('seed'),
+            force=bool(data.get('force', False)),
+            autonomy_level=str(data.get('autonomy_level', 'balanced')).lower(),
+        ))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Dark/house autopilot failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/showrunner/promo-beats', methods=['POST'])
+def generate_promo_beats():
+    try:
+        data = request.get_json(silent=True) or {}
+        state = get_database().get_game_state() if hasattr(get_database(), 'get_game_state') else {}
+        year, week = _request_year_week(data, state)
+        return jsonify(get_showrunner().generate_promo_beats(
+            year,
+            week,
+            show_draft=data.get('show_draft'),
+            seed=data.get('seed'),
+            force=bool(data.get('force', False)),
+        ))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Promo beat generation failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/showrunner/live-interruption', methods=['POST'])
+def preview_live_interruption():
+    try:
+        data = request.get_json(silent=True) or {}
+        return jsonify(get_showrunner().maybe_live_interruption(
+            data.get('show_draft') or {},
+            universe=get_universe(),
+            seed=data.get('seed'),
+            force=bool(data.get('force', False)),
+            autonomy_level=str(data.get('autonomy_level', 'balanced')).lower(),
+        ))
+    except Exception as exc:
+        current_app.logger.exception("Live interruption preview failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/approval-queue/<approval_id>/decision', methods=['POST'])
+def decide_booker_approval(approval_id):
+    try:
+        return jsonify(get_showrunner().decide_approval(approval_id, request.get_json(silent=True) or {}))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Booker approval decision failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/approval-queue/auto-resolve', methods=['POST'])
+def auto_resolve_booker_queue():
+    try:
+        data = request.get_json(silent=True) or {}
+        state = get_database().get_game_state() if hasattr(get_database(), 'get_game_state') else {}
+        year, week = _request_year_week(data, state)
+        return jsonify(get_showrunner().auto_resolve_due(year, week))
+    except Exception as exc:
+        current_app.logger.exception("Booker queue auto-resolve failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/post-show/fallout/latest', methods=['GET'])
+def latest_post_show_fallout():
+    try:
+        show_id = request.args.get('show_id')
+        year = request.args.get('year')
+        week = request.args.get('week')
+        limit = _coerce_int(request.args.get('limit'), 8)
+        return jsonify(get_post_show_fallout().get_latest(
+            show_id=show_id,
+            year=_coerce_int(year, None) if year not in (None, "") else None,
+            week=_coerce_int(week, None) if week not in (None, "") else None,
+            limit=limit,
+        ))
+    except Exception as exc:
+        current_app.logger.exception("Post-show fallout latest failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/post-show/fallout/items/<item_id>/decision', methods=['POST'])
+def decide_post_show_fallout_item(item_id):
+    try:
+        return jsonify(get_post_show_fallout().decide_item(item_id, request.get_json(silent=True) or {}))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Post-show fallout decision failed")
+        return jsonify({'error': str(exc)}), 500
+
+
+@booker_bp.route('/api/booker/post-show/fallout/<report_id>/auto-handle', methods=['POST'])
+def auto_handle_post_show_fallout(report_id):
+    try:
+        return jsonify(get_post_show_fallout().auto_handle_report(report_id))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 422
+    except Exception as exc:
+        current_app.logger.exception("Post-show fallout auto-handle failed")
+        return jsonify({'error': str(exc)}), 500

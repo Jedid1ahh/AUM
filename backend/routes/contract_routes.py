@@ -25,7 +25,12 @@ def get_universe():
 def get_contract_roster():
     """Contract workflows should include injured talent with active deals."""
     universe = get_universe()
-    return [wrestler for wrestler in universe.wrestlers if not wrestler.is_retired]
+    if not universe:
+        return []
+    return [
+        wrestler for wrestler in universe.wrestlers
+        if not wrestler.is_retired and getattr(wrestler, 'contract', None)
+    ]
 
 
 def _contract_weeks_remaining(wrestler):
@@ -1027,10 +1032,11 @@ def api_get_performance_dashboard():
         }
         
         for wrestler in get_contract_roster():
-            if not hasattr(wrestler.contract, 'incentives'):
+            contract = getattr(wrestler, 'contract', None)
+            if not contract or not hasattr(contract, 'incentives'):
                 continue
             
-            for incentive in wrestler.contract.incentives:
+            for incentive in contract.incentives:
                 if incentive.incentive_type.value != 'performance_escalator':
                     continue
                 
@@ -1577,7 +1583,7 @@ def api_get_contract_alerts_dashboard():
         # Alert 3: Unhappy high-value wrestlers
         unhappy_stars = [
             w for w in contract_roster
-            if w.morale < 30 and w.is_major_superstar
+            if getattr(w, 'morale', 50) < 30 and getattr(w, 'is_major_superstar', False)
         ]
         
         if unhappy_stars:
@@ -1600,7 +1606,7 @@ def api_get_contract_alerts_dashboard():
                 continue
             
             market_value = contract_manager.calculate_market_value(wrestler)
-            current_salary = wrestler.contract.salary_per_show
+            current_salary = getattr(getattr(wrestler, 'contract', None), 'salary_per_show', 0) or 0
             
             if current_salary < market_value * 0.8 and wrestler.morale >= 60:
                 bargains.append({
@@ -1627,14 +1633,15 @@ def api_get_contract_alerts_dashboard():
         # Alert 5: PPV guarantee violations
         ppv_violations = []
         for wrestler in contract_roster:
-            if not hasattr(wrestler.contract, 'guaranteed_ppv_appearances'):
+            contract = getattr(wrestler, 'contract', None)
+            if not contract or not hasattr(contract, 'guaranteed_ppv_appearances'):
                 continue
             
-            guaranteed = wrestler.contract.guaranteed_ppv_appearances
+            guaranteed = contract.guaranteed_ppv_appearances
             if guaranteed == 0:
                 continue
             
-            actual = getattr(wrestler.contract, 'ppv_appearances_this_year', 0)
+            actual = getattr(contract, 'ppv_appearances_this_year', 0)
             weeks_left = 52 - current_week
             ppvs_remaining = max(0, (weeks_left // 4))  # Rough estimate
             
@@ -1661,18 +1668,19 @@ def api_get_contract_alerts_dashboard():
         # Alert 6: Option years available
         option_years = []
         for wrestler in contract_roster:
-            if not hasattr(wrestler.contract, 'option_years_remaining'):
+            contract = getattr(wrestler, 'contract', None)
+            if not contract or not hasattr(contract, 'option_years_remaining'):
                 continue
 
             weeks_remaining = _contract_weeks_remaining(wrestler)
             if (
-                wrestler.contract.option_years_remaining > 0
+                contract.option_years_remaining > 0
                 and weeks_remaining is not None
                 and weeks_remaining <= 8
             ):
                 option_years.append({
                     'wrestler_name': wrestler.name,
-                    'option_years': wrestler.contract.option_years_remaining,
+                    'option_years': contract.option_years_remaining,
                     'weeks_remaining': weeks_remaining
                 })
         

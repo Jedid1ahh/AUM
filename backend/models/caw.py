@@ -13,7 +13,6 @@ class CAWValidator:
     """Validates Create-A-Wrestler input data"""
     
     VALID_GENDERS = ['Male', 'Female']
-    VALID_ALIGNMENTS = ['Face', 'Heel', 'Tweener']
     VALID_ROLES = ['Main Event', 'Upper Midcard', 'Midcard', 'Lower Midcard', 'Jobber']
     VALID_BRANDS = ['ROC Alpha', 'ROC Velocity', 'ROC Vanguard']
     
@@ -78,14 +77,6 @@ class CAWValidator:
         return True, ""
     
     @staticmethod
-    def validate_alignment(alignment: str) -> tuple[bool, str]:
-        """Validate alignment"""
-        if alignment not in CAWValidator.VALID_ALIGNMENTS:
-            return False, f"Alignment must be one of: {', '.join(CAWValidator.VALID_ALIGNMENTS)}"
-        
-        return True, ""
-    
-    @staticmethod
     def validate_role(role: str) -> tuple[bool, str]:
         """Validate role"""
         if role not in CAWValidator.VALID_ROLES:
@@ -143,11 +134,6 @@ class CAWValidator:
         
         # Gender
         valid, error = CAWValidator.validate_gender(data.get('gender', ''))
-        if not valid:
-            errors.append(error)
-        
-        # Alignment
-        valid, error = CAWValidator.validate_alignment(data.get('alignment', ''))
         if not valid:
             errors.append(error)
         
@@ -241,7 +227,7 @@ class CAWFactory:
             name=data['name'].strip(),
             age=data['age'],
             gender=data['gender'],
-            alignment=data['alignment'],
+            alignment=data.get('alignment', 'Neutral'),
             role=data['role'],
             primary_brand=data['primary_brand'],
             
@@ -435,7 +421,7 @@ class CAWPresets:
                 'role': 'Upper Midcard',
                 'description': 'Experienced ring general'
             },
-            'monster_heel': {
+            'dominant_powerhouse': {
                 'brawling': 90,
                 'technical': 45,
                 'speed': 35,
@@ -443,10 +429,9 @@ class CAWPresets:
                 'psychology': 70,
                 'stamina': 85,
                 'role': 'Main Event',
-                'description': 'Dominant powerhouse villain',
-                'alignment': 'Heel'
+                'description': 'Dominant powerhouse'
             },
-            'underdog_face': {
+            'resilient_underdog': {
                 'brawling': 55,
                 'technical': 65,
                 'speed': 75,
@@ -454,8 +439,7 @@ class CAWPresets:
                 'psychology': 80,
                 'stamina': 70,
                 'role': 'Midcard',
-                'description': 'Sympathetic hero with heart',
-                'alignment': 'Face'
+                'description': 'Resilient underdog with heart'
             },
             'balanced': {
                 'brawling': 65,
@@ -482,7 +466,7 @@ class CAWPresets:
             'mic_worker': CAWPresets.get_preset('mic_worker'),
             'rookie': CAWPresets.get_preset('rookie'),
             'veteran': CAWPresets.get_preset('veteran'),
-            'monster_heel': CAWPresets.get_preset('monster_heel'),
-            'underdog_face': CAWPresets.get_preset('underdog_face'),
+            'dominant_powerhouse': CAWPresets.get_preset('dominant_powerhouse'),
+            'resilient_underdog': CAWPresets.get_preset('resilient_underdog'),
             'balanced': CAWPresets.get_preset('balanced')
         }

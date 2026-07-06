@@ -1,5 +1,5 @@
 """
-Developmental Routes - API endpoints for ROC Nexus developmental brand
+Developmental Routes - API endpoints for ROC Vanguard developmental brand
 Handles call-ups, roster management, and developmental championship.
 """
 
@@ -23,6 +23,191 @@ def get_dev_manager():
 def get_call_up_engine():
     """Get the call-up engine from app config"""
     return current_app.config.get('CALL_UP_ENGINE')
+
+
+def get_database():
+    """Get the database from app config."""
+    return current_app.config.get('DATABASE')
+
+
+def _score_wrestler_readiness(wrestler):
+    """Build a stable Vanguard readiness profile from existing wrestler stats."""
+    in_ring = int((wrestler.brawling + wrestler.technical + wrestler.speed + wrestler.psychology + wrestler.stamina) / 5)
+    promo = int(wrestler.mic)
+    character = int((wrestler.mic + wrestler.psychology + wrestler.popularity) / 3)
+    crowd = int(max(0, min(100, (wrestler.popularity * 0.75) + ((wrestler.momentum + 100) * 0.125))))
+    aggregate = int((in_ring * 0.35) + (promo * 0.25) + (character * 0.20) + (crowd * 0.20))
+    status = 'ready' if aggregate >= 75 and min(in_ring, promo, character, crowd) >= 60 else 'developing'
+    return {
+        'in_ring_score': in_ring,
+        'promo_score': promo,
+        'character_score': character,
+        'crowd_reaction_score': crowd,
+        'aggregate_readiness_score': aggregate,
+        'readiness_status': status
+    }
+
+
+def _decision_score(readiness, brand_need=70, timing=65, buzz=None):
+    """Calculate call-up decision score using the requested business weights."""
+    buzz_score = buzz if buzz is not None else readiness['crowd_reaction_score']
+    creative_fit = int((readiness['promo_score'] + readiness['character_score']) / 2)
+    return {
+        'performance_score': readiness['aggregate_readiness_score'],
+        'creative_fit_score': creative_fit,
+        'timing_score': timing,
+        'brand_need_score': brand_need,
+        'buzz_score': buzz_score,
+        'decision_score': int(
+            readiness['aggregate_readiness_score'] * 0.35
+            + creative_fit * 0.25
+            + timing * 0.20
+            + brand_need * 0.15
+            + buzz_score * 0.05
+        )
+    }
+
+
+@developmental_bp.route('/api/developmental/vanguard-dashboard', methods=['GET'])
+def api_get_vanguard_dashboard():
+    """Executive dashboard for ROC Vanguard readiness, call-ups, and GM health."""
+    try:
+        universe = get_universe()
+        database = get_database()
+        if not universe or not database:
+            return jsonify({'error': 'Developmental system not initialized'}), 500
+
+        roster = [w for w in universe.wrestlers if w.primary_brand == 'ROC Vanguard' and not w.is_retired]
+        prospects = []
+        for wrestler in roster:
+            readiness = _score_wrestler_readiness(wrestler)
+            decision = _decision_score(readiness)
+            prospects.append({
+                'wrestler_id': wrestler.id,
+                'wrestler_name': wrestler.name,
+                'role': wrestler.role,
+                'age': wrestler.age,
+                'popularity': wrestler.popularity,
+                **readiness,
+                **decision,
+                'recommended_brand': 'ROC Alpha' if wrestler.popularity >= 70 else 'ROC Velocity'
+            })
+
+        prospects.sort(key=lambda row: row['decision_score'], reverse=True)
+        ready_count = len([row for row in prospects if row['readiness_status'] == 'ready'])
+
+        cursor = database.conn.cursor()
+        cursor.execute('SELECT * FROM brand_metadata ORDER BY brand_tier, prestige_level DESC')
+        brands = [dict(row) for row in cursor.fetchall()]
+        cursor.execute('SELECT * FROM general_managers ORDER BY current_brand')
+        general_managers = [dict(row) for row in cursor.fetchall()]
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'vanguard_roster_count': len(roster),
+                'call_up_ready_count': ready_count,
+                'average_readiness': round(sum(p['aggregate_readiness_score'] for p in prospects) / len(prospects), 1) if prospects else 0,
+                'top_prospect': prospects[0] if prospects else None
+            },
+            'brands': brands,
+            'prospects': prospects,
+            'general_managers': general_managers
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@developmental_bp.route('/api/developmental/evaluations/<wrestler_id>', methods=['POST'])
+def api_record_vanguard_evaluation(wrestler_id):
+    """Record manual scout/coach readiness evaluation for a Vanguard wrestler."""
+    try:
+        data = request.get_json() or {}
+        universe = get_universe()
+        database = get_database()
+        wrestler = universe.get_wrestler_by_id(wrestler_id) if universe else None
+        if not wrestler:
+            return jsonify({'success': False, 'error': 'Wrestler not found'}), 404
+
+        current_year = getattr(universe, 'current_year', 1)
+        current_week = getattr(universe, 'current_week', 1)
+        readiness = {
+            'in_ring_score': int(data.get('in_ring_score', 50)),
+            'promo_score': int(data.get('promo_score', 50)),
+            'character_score': int(data.get('character_score', 50)),
+            'crowd_reaction_score': int(data.get('crowd_reaction_score', 50)),
+        }
+        for key, value in readiness.items():
+            if value < 0 or value > 100:
+                return jsonify({'success': False, 'error': f'{key} must be between 0 and 100'}), 400
+
+        aggregate = int(
+            readiness['in_ring_score'] * 0.35
+            + readiness['promo_score'] * 0.25
+            + readiness['character_score'] * 0.20
+            + readiness['crowd_reaction_score'] * 0.20
+        )
+        status = 'ready' if aggregate >= 75 and min(readiness.values()) >= 60 else 'developing'
+        cursor = database.conn.cursor()
+        cursor.execute('''
+            INSERT INTO wrestler_evaluations (
+                wrestler_id, brand_name, evaluation_year, evaluation_week,
+                in_ring_score, promo_score, character_score, crowd_reaction_score,
+                aggregate_readiness_score, readiness_status, scout_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            wrestler_id, 'ROC Vanguard', current_year, current_week,
+            readiness['in_ring_score'], readiness['promo_score'],
+            readiness['character_score'], readiness['crowd_reaction_score'],
+            aggregate, status, data.get('scout_notes', '')
+        ))
+        database.conn.commit()
+
+        return jsonify({
+            'success': True,
+            'wrestler_id': wrestler_id,
+            'aggregate_readiness_score': aggregate,
+            'readiness_status': status
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@developmental_bp.route('/api/developmental/gm-dashboard', methods=['GET'])
+def api_get_gm_dashboard():
+    """GM promotion dashboard with seeded brand authority figures."""
+    try:
+        database = get_database()
+        if not database:
+            return jsonify({'success': False, 'error': 'Database unavailable'}), 500
+
+        cursor = database.conn.cursor()
+        cursor.execute('SELECT COUNT(*) AS count FROM general_managers')
+        if cursor.fetchone()['count'] == 0:
+            cursor.executemany('''
+                INSERT INTO general_managers (
+                    gm_name, current_brand, gm_tier, background, character_type,
+                    mic_skill, screen_presence, crisis_management,
+                    political_navigation, executive_satisfaction
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', [
+                ('Eli Drakeon', 'ROC Vanguard', 'developmental_authority', 'former_wrestler', 'fair_but_firm', 82, 78, 86, 70, 76),
+                ('Monica Vale', 'ROC Velocity', 'flagship_authority', 'outside_executive', 'corporate_political', 76, 84, 74, 88, 82),
+                ('Marcus Sterling', 'ROC Alpha', 'top_flagship_authority', 'backstage_producer', 'authoritative_strict', 84, 88, 82, 86, 85),
+            ])
+            database.conn.commit()
+
+        cursor.execute('SELECT * FROM general_managers ORDER BY CASE current_brand WHEN "ROC Alpha" THEN 1 WHEN "ROC Velocity" THEN 2 ELSE 3 END')
+        gms = [dict(row) for row in cursor.fetchall()]
+        for gm in gms:
+            aggregate = int((gm['mic_skill'] * 0.20) + (gm['screen_presence'] * 0.20) + (gm['crisis_management'] * 0.30) + (gm['political_navigation'] * 0.15) + (gm['executive_satisfaction'] * 0.15))
+            gm['aggregate_score'] = aggregate
+            gm['promotion_eligible'] = aggregate >= 75 and gm['current_brand'] != 'ROC Alpha'
+            gm['next_step'] = 'Shadow ROC Velocity' if gm['current_brand'] == 'ROC Vanguard' else 'Shadow ROC Alpha' if gm['current_brand'] == 'ROC Velocity' else 'Executive oversight'
+
+        return jsonify({'success': True, 'general_managers': gms})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ============================================================================
@@ -417,7 +602,7 @@ def api_get_developmental_statistics():
         return jsonify({
             'overall': stats,
             'by_brand': brand_stats,
-            'nexus_championship': dev_manager.nexus_championship.to_dict(),
+            'vanguard_championship': dev_manager.nexus_championship.to_dict(),
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -429,7 +614,7 @@ def api_get_developmental_statistics():
 
 @developmental_bp.route('/api/developmental/championship', methods=['GET'])
 def api_get_nexus_championship():
-    """Get the Nexus Championship details"""
+    """Get the ROC Vanguard developmental championship details"""
     try:
         dev_manager = get_dev_manager()
         if not dev_manager:
@@ -442,7 +627,7 @@ def api_get_nexus_championship():
 
 @developmental_bp.route('/api/developmental/championship/crown', methods=['POST'])
 def api_crown_nexus_champion():
-    """Crown a new Nexus Champion"""
+    """Crown a new ROC Vanguard developmental champion"""
     try:
         data = request.get_json()
         wrestler_id = data.get('wrestler_id')
@@ -481,11 +666,11 @@ def api_crown_nexus_champion():
         # Add achievement to wrestler if in developmental
         entry = dev_manager.get_entry(wrestler_id)
         if entry:
-            entry.add_achievement('nexus_champion')
+            entry.add_achievement('vanguard_prospects_champion')
         
         return jsonify({
             'success': True,
-            'message': f'{wrestler_name} is the new Nexus Champion!',
+            'message': f'{wrestler_name} is the new ROC Vanguard Prospects Champion!',
             'championship': champ.to_dict()
         })
     except Exception as e:
@@ -494,7 +679,7 @@ def api_crown_nexus_champion():
 
 @developmental_bp.route('/api/developmental/championship/book-match', methods=['POST'])
 def api_book_nexus_championship_match():
-    """Book and simulate a Nexus match with optional title stakes."""
+    """Book and simulate a ROC Vanguard match with optional title stakes."""
     try:
         data = request.get_json() or {}
         wrestler1_id = data.get('wrestler1_id')
@@ -708,11 +893,11 @@ def api_add_to_developmental():
             coaching_notes=coaching_notes
         )
         
-        # Update wrestler's brand to Nexus
+        # Update wrestler's brand to ROC Vanguard
         wrestler = universe.get_wrestler_by_id(wrestler_id)
         if wrestler:
             from models.developmental_roster import DevelopmentalBrand
-            wrestler.primary_brand = DevelopmentalBrand.ROC_NEXUS.value
+            wrestler.primary_brand = DevelopmentalBrand.ROC_VANGUARD.value
         
         return jsonify({
             'success': True,

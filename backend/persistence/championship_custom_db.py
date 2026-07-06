@@ -220,6 +220,16 @@ def retire_championship(database, title_id: str, year: int, week: int, reason: s
         SET retired = 1, retired_year = ?, retired_week = ?, updated_at = ?
         WHERE title_id = ?
     ''', (year, week, now, title_id))
+    if cursor.rowcount == 0:
+        cursor.execute('''
+            INSERT INTO championship_extended (
+                title_id, division, weight_class, is_tag_team, tag_team_size,
+                description, is_custom, created_year, created_week,
+                retired, retired_year, retired_week,
+                appearance_json, defense_requirements_json,
+                created_at, updated_at
+            ) VALUES (?, 'open', 'open', 0, 2, '', 0, NULL, NULL, 1, ?, ?, NULL, NULL, ?, ?)
+        ''', (title_id, year, week, now, now))
     
     # Log the retirement
     log_championship_action(database, title_id, 'retired', year, week, reason)

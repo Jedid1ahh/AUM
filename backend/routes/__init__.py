@@ -43,6 +43,10 @@ from .world_feed_routes import world_feed_bp
 from .history_hub_routes import history_hub_bp
 from .booker_routes import booker_bp
 from .developmental_routes import developmental_bp
+from .character_system_routes import character_system_bp
+from .phase_expansion_routes import phase_expansion_bp
+from .simulation_expansion_routes import simulation_expansion_bp
+from .contract_market_routes import contract_market_bp
 
 # Existing imports...
 from models.wrestler import Wrestler
@@ -146,6 +150,10 @@ def register_all_routes(app, database, universe, **kwargs):
         history_hub_bp,
         booker_bp,
         developmental_bp,
+        character_system_bp,
+        phase_expansion_bp,
+        simulation_expansion_bp,
+        contract_market_bp,
     ]
 
     # DEBUG: Print all blueprint names to find duplicates
@@ -233,4 +241,8 @@ __all__ = [
     'history_hub_bp',
     'booker_bp',
     'developmental_bp',
+    'character_system_bp',
+    'phase_expansion_bp',
+    'simulation_expansion_bp',
+    'contract_market_bp',
 ]

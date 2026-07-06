@@ -2,8 +2,8 @@
 <div class="container-fluid py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2><i class="bi bi-stars"></i> ROC Nexus - Developmental</h2>
-            <p class="text-muted mb-0">Manage your talent pipeline and call-ups to main roster</p>
+            <h2><i class="bi bi-stars"></i> ROC Vanguard - Developmental</h2>
+            <p class="text-muted mb-0">Evaluate prospects, plan call-ups, and monitor GM promotion paths</p>
         </div>
         <button class="btn btn-primary" onclick="loadDevelopmentalRoster()">
             <i class="bi bi-arrow-clockwise"></i> Refresh
@@ -70,7 +70,17 @@
         </li>
         <li class="nav-item" role="presentation">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#championship-tab">
-                <i class="bi bi-trophy"></i> Nexus Championship
+                <i class="bi bi-trophy"></i> Vanguard Championship
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#vanguard-analytics-tab" onclick="loadVanguardDashboard()">
+                <i class="bi bi-speedometer2"></i> Vanguard Analytics
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#gm-promotion-tab" onclick="loadGMDashboard()">
+                <i class="bi bi-person-badge"></i> GM Promotion
             </button>
         </li>
     </ul>
@@ -222,13 +232,13 @@
             </div>
         </div>
 
-        <!-- Nexus Championship Tab -->
+        <!-- Vanguard Championship Tab -->
         <div class="tab-pane fade" id="championship-tab">
             <div class="row mb-4">
                 <div class="col-md-6">
                     <div class="card">
                         <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0"><i class="bi bi-trophy"></i> Nexus Championship</h5>
+                            <h5 class="mb-0"><i class="bi bi-trophy"></i> Vanguard Prospects Championship</h5>
                         </div>
                         <div class="card-body" id="nexusChampionshipInfo">
                             <div class="text-center py-4">
@@ -246,7 +256,7 @@
                         </div>
                         <div class="card-body">
                             <button class="btn btn-warning w-100 mb-2" onclick="showBookNexusMatchModal()">
-                                <i class="bi bi-calendar-event"></i> Book Nexus Match
+                                <i class="bi bi-calendar-event"></i> Book Vanguard Match
                             </button>
                             <button class="btn btn-info w-100 mb-2" onclick="showCrownChampionModal()">
                                 <i class="bi bi-crown"></i> Crown New Champion
@@ -264,7 +274,7 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header bg-secondary text-white">
-                            <h5 class="mb-0"><i class="bi bi-journal-bookmark"></i> Nexus Championship History</h5>
+                            <h5 class="mb-0"><i class="bi bi-journal-bookmark"></i> Vanguard Championship History</h5>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -283,6 +293,57 @@
                                 </table>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vanguard Analytics Tab -->
+        <div class="tab-pane fade" id="vanguard-analytics-tab">
+            <div class="card">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-speedometer2"></i> Vanguard Call-Up Analytics</h5>
+                    <button class="btn btn-sm btn-light" onclick="loadVanguardDashboard()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="vanguardAnalyticsSummary" class="row g-3 mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Prospect</th>
+                                    <th>In-Ring</th>
+                                    <th>Promo</th>
+                                    <th>Character</th>
+                                    <th>Crowd</th>
+                                    <th>Readiness</th>
+                                    <th>Decision</th>
+                                    <th>Recommendation</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vanguardProspectRows">
+                                <tr><td colspan="8" class="text-center text-muted">Open this tab to load analytics.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GM Promotion Tab -->
+        <div class="tab-pane fade" id="gm-promotion-tab">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> General Manager Promotion Tracker</h5>
+                    <button class="btn btn-sm btn-light" onclick="loadGMDashboard()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3" id="gmDashboardCards">
+                        <div class="col-12 text-center text-muted">Open this tab to load GM performance scorecards.</div>
                     </div>
                 </div>
             </div>
@@ -433,7 +494,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title">Crown Nexus Champion</h5>
+                <h5 class="modal-title">Crown Vanguard Champion</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -462,12 +523,12 @@
     </div>
 </div>
 
-<!-- Book Nexus Match Modal -->
+<!-- Book Vanguard Match Modal -->
 <div class="modal fade" id="bookNexusMatchModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-calendar-event"></i> Book Nexus Match</h5>
+                <h5 class="modal-title"><i class="bi bi-calendar-event"></i> Book Vanguard Match</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -1312,11 +1373,105 @@ async function viewWrestlerDetails(wrestlerId) {
     }
 }
 
+function scoreBadgeClass(score) {
+    if (score >= 80) return 'success';
+    if (score >= 65) return 'warning';
+    return 'secondary';
+}
+
+async function loadVanguardDashboard() {
+    const summary = document.getElementById('vanguardAnalyticsSummary');
+    const rows = document.getElementById('vanguardProspectRows');
+    if (!summary || !rows) return;
+
+    summary.innerHTML = '<div class="col-12 text-center text-muted">Loading Vanguard analytics...</div>';
+    rows.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Loading...</td></tr>';
+
+    try {
+        const response = await fetch('/api/developmental/vanguard-dashboard');
+        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || 'Failed to load Vanguard dashboard');
+        }
+
+        const top = data.summary.top_prospect;
+        summary.innerHTML = `
+            <div class="col-md-3"><div class="card bg-light"><div class="card-body"><div class="text-muted small">Vanguard Roster</div><div class="h4 mb-0">${data.summary.vanguard_roster_count}</div></div></div></div>
+            <div class="col-md-3"><div class="card bg-light"><div class="card-body"><div class="text-muted small">Call-Up Ready</div><div class="h4 mb-0">${data.summary.call_up_ready_count}</div></div></div></div>
+            <div class="col-md-3"><div class="card bg-light"><div class="card-body"><div class="text-muted small">Average Readiness</div><div class="h4 mb-0">${data.summary.average_readiness}</div></div></div></div>
+            <div class="col-md-3"><div class="card bg-light"><div class="card-body"><div class="text-muted small">Top Prospect</div><div class="h6 mb-0">${top ? top.wrestler_name : 'None'}</div></div></div></div>
+        `;
+
+        if (!data.prospects.length) {
+            rows.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No active ROC Vanguard prospects found.</td></tr>';
+            return;
+        }
+
+        rows.innerHTML = data.prospects.map(prospect => `
+            <tr>
+                <td>
+                    <strong>${prospect.wrestler_name}</strong>
+                    <div class="text-muted small">${prospect.role} · Age ${prospect.age}</div>
+                </td>
+                <td><span class="badge bg-${scoreBadgeClass(prospect.in_ring_score)}">${prospect.in_ring_score}</span></td>
+                <td><span class="badge bg-${scoreBadgeClass(prospect.promo_score)}">${prospect.promo_score}</span></td>
+                <td><span class="badge bg-${scoreBadgeClass(prospect.character_score)}">${prospect.character_score}</span></td>
+                <td><span class="badge bg-${scoreBadgeClass(prospect.crowd_reaction_score)}">${prospect.crowd_reaction_score}</span></td>
+                <td><span class="badge bg-${prospect.readiness_status === 'ready' ? 'success' : 'secondary'}">${prospect.aggregate_readiness_score} · ${prospect.readiness_status}</span></td>
+                <td><span class="badge bg-${scoreBadgeClass(prospect.decision_score)}">${prospect.decision_score}</span></td>
+                <td>${prospect.recommended_brand}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        summary.innerHTML = `<div class="col-12"><div class="alert alert-danger">${error.message}</div></div>`;
+        rows.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Unable to load Vanguard analytics.</td></tr>';
+    }
+}
+
+async function loadGMDashboard() {
+    const container = document.getElementById('gmDashboardCards');
+    if (!container) return;
+
+    container.innerHTML = '<div class="col-12 text-center text-muted">Loading GM scorecards...</div>';
+
+    try {
+        const response = await fetch('/api/developmental/gm-dashboard');
+        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || 'Failed to load GM dashboard');
+        }
+
+        container.innerHTML = data.general_managers.map(gm => `
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="mb-1">${gm.gm_name}</h5>
+                                <div class="text-muted small">${gm.current_brand} · ${gm.gm_tier.replaceAll('_', ' ')}</div>
+                            </div>
+                            <span class="badge bg-${scoreBadgeClass(gm.aggregate_score)}">${gm.aggregate_score}</span>
+                        </div>
+                        <div class="small mb-2">Crisis ${gm.crisis_management} · Presence ${gm.screen_presence} · Politics ${gm.political_navigation}</div>
+                        <div class="alert ${gm.promotion_eligible ? 'alert-success' : 'alert-secondary'} py-2 mb-0">
+                            ${gm.promotion_eligible ? 'Promotion eligible' : 'Hold current role'} · ${gm.next_step}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        container.innerHTML = `<div class="col-12"><div class="alert alert-danger">${error.message}</div></div>`;
+    }
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
     loadDevelopmentalRoster();
     loadRecommendations();
     loadCallUpHistory();
     loadNexusChampionship();
+    loadVanguardDashboard();
+    loadGMDashboard();
 });
 </script>

@@ -22,6 +22,7 @@ class SegmentDraft:
     title_id: Optional[str] = None
     title_name: Optional[str] = None
     tone: str = 'intense'
+    purpose: str = 'general'
     duration_minutes: int = 5
     card_position: int = 0
     is_opening: bool = False
@@ -37,6 +38,7 @@ class SegmentDraft:
             'title_id': self.title_id,
             'title_name': self.title_name,
             'tone': self.tone,
+            'purpose': self.purpose,
             'duration_minutes': self.duration_minutes,
             'card_position': self.card_position,
             'is_opening': self.is_opening,
@@ -54,6 +56,7 @@ class SegmentDraft:
             title_id=data.get('title_id'),
             title_name=data.get('title_name'),
             tone=data.get('tone', 'intense'),
+            purpose=data.get('purpose', 'general'),
             duration_minutes=data.get('duration_minutes', 5),
             card_position=data.get('card_position', 0),
             is_opening=data.get('is_opening', False),
@@ -295,4 +298,9 @@ class ShowResult:
             'net_profit': self.net_profit,
             'events': self.events,
             'pacing_report': getattr(self, 'pacing_report', None),
+            'revenue_breakdown': getattr(self, 'revenue_breakdown', None),
+            'expense_breakdown': getattr(self, 'expense_breakdown', None),
+            'profit_projection': getattr(self, 'profit_projection', None),
+            'profit_warnings': getattr(self, 'profit_warnings', []),
+            'profit_recommendations': getattr(self, 'profit_recommendations', []),
         }

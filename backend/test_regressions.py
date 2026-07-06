@@ -2,6 +2,8 @@ import os
 import sys
 import unittest
 import uuid
+import importlib.util
+import types
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -12,7 +14,45 @@ from models.contract import IncentiveType
 from models.wrestler import Wrestler
 from persistence.database import Database
 from persistence.universe_db import DatabaseUniverseState
-from routes.defense_frequency_routes import _build_status
+
+
+def _load_defense_frequency_status_builder():
+    try:
+        from routes.defense_frequency_routes import _build_status as build_status
+        return build_status
+    except ModuleNotFoundError as exc:
+        if exc.name != "flask":
+            raise
+
+    class _Blueprint:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def route(self, *args, **kwargs):
+            return lambda func: func
+
+    flask_stub = types.SimpleNamespace(
+        Blueprint=_Blueprint,
+        jsonify=lambda *args, **kwargs: args[0] if len(args) == 1 and not kwargs else {"args": args, "kwargs": kwargs},
+        request=types.SimpleNamespace(args={}, get_json=lambda *args, **kwargs: {}),
+        current_app=types.SimpleNamespace(config={}),
+    )
+    previous = sys.modules.get("flask")
+    sys.modules["flask"] = flask_stub
+    try:
+        route_path = os.path.join(os.path.dirname(__file__), "routes", "defense_frequency_routes.py")
+        spec = importlib.util.spec_from_file_location("_test_defense_frequency_routes", route_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module._build_status
+    finally:
+        if previous is None:
+            sys.modules.pop("flask", None)
+        else:
+            sys.modules["flask"] = previous
+
+
+_build_status = _load_defense_frequency_status_builder()
 
 
 class _StubCalendar:

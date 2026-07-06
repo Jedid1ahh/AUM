@@ -1,6 +1,6 @@
 """
-Developmental Roster System - NXT/Developmental Brand
-Handles the fourth developmental brand with call-up mechanics to main roster brands.
+Developmental Roster System - ROC Vanguard Developmental Brand
+Handles ROC Vanguard call-up mechanics to ROC Alpha and ROC Velocity.
 Integrates with prospect_system.py for talent pipeline management.
 """
 
@@ -16,8 +16,9 @@ import random
 # ============================================================================
 
 class DevelopmentalBrand(Enum):
-    """The developmental brand (NXT-style)"""
-    ROC_NEXUS = "ROC Nexus"  # Fourth developmental brand
+    """The developmental brand."""
+    ROC_VANGUARD = "ROC Vanguard"
+    ROC_NEXUS = "ROC Vanguard"  # Backward-compatible enum alias.
     
     @property
     def label(self) -> str:
@@ -25,7 +26,7 @@ class DevelopmentalBrand(Enum):
     
     @property
     def display_name(self) -> str:
-        return "Nexus"
+        return "Vanguard"
 
 
 # ============================================================================
@@ -308,7 +309,7 @@ class CallUpHistory:
     wrestler_name: str
     call_up_year: int
     call_up_week: int
-    source_brand: str  # Always ROC Nexus
+    source_brand: str  # Always ROC Vanguard
     destination_brand: str  # Alpha, Velocity, or Vanguard
     reason: CallUpReason
     initiating_gm: Optional[str] = None  # GM who requested the call-up
@@ -342,8 +343,8 @@ class CallUpHistory:
 @dataclass
 class DevelopmentalChampionship:
     """Tracks the developmental brand championship"""
-    championship_id: str = "nexus_championship"
-    name: str = "Nexus Championship"
+    championship_id: str = "vanguard_prospects_championship"
+    name: str = "ROC Vanguard Prospects Championship"
     current_holder_id: Optional[str] = None
     current_holder_name: Optional[str] = None
     won_date_year: Optional[int] = None
@@ -487,7 +488,7 @@ class DevelopmentalRosterManager:
             wrestler_name=entry.wrestler_name,
             call_up_year=current_year or 0,
             call_up_week=current_week or 0,
-            source_brand=DevelopmentalBrand.ROC_NEXUS.value,
+            source_brand=DevelopmentalBrand.ROC_VANGUARD.value,
             destination_brand=destination_brand,
             reason=reason,
             initiating_gm=initiating_gm,
@@ -613,7 +614,7 @@ class DevelopmentalRosterManager:
         if champ_data:
             manager.nexus_championship = DevelopmentalChampionship(
                 championship_id=champ_data.get("championship_id", "nexus_championship"),
-                name=champ_data.get("name", "Nexus Championship"),
+                name=champ_data.get("name", "ROC Vanguard Prospects Championship"),
                 current_holder_id=champ_data.get("current_holder_id"),
                 current_holder_name=champ_data.get("current_holder_name"),
                 won_date_year=champ_data.get("won_date_year"),

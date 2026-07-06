@@ -55,8 +55,9 @@ class Calendar:
     5. Summer Slamfest - Week 32 (August)
     6. Autumn Annihilation - Week 40 (October)
     7. Night of Glory - Week 44 (November)
-    8. LegacyMania Night 1 - Week 51 (December)
-    9. LegacyMania Night 2 - Week 52 (December)
+    8. Elimination Chamber - Week 48 (December)
+    9. LegacyMania Night 1 - Week 51 (December)
+    10. LegacyMania Night 2 - Week 52 (December)
     """
     
     # PPV/PLE Configuration
@@ -116,6 +117,14 @@ class Calendar:
             'tier': 'major',
             'description': 'Major PLE event with brand-specific showcases',
             'replaces_show': 'ROC Alpha'
+        },
+        {
+            'week': 48,
+            'name': 'Elimination Chamber',
+            'brand': 'Cross-Brand',
+            'tier': 'major',
+            'description': 'Six-person chamber wars to shape the LegacyMania world-title scene',
+            'replaces_show': 'ROC Velocity'
         },
         {
             'week': 51,

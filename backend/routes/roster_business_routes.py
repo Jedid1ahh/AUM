@@ -1,7 +1,10 @@
 from flask import Blueprint, jsonify, request, current_app
 from datetime import datetime
+import sqlite3
+import threading
 
 roster_business_bp = Blueprint('roster_business', __name__)
+_business_tables_lock = threading.Lock()
 
 
 def _db():
@@ -44,12 +47,22 @@ def _init_tables():
     )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_merch_wrestler ON merchandise_items(wrestler_id, is_deleted)")
-    conn.commit()
+    try:
+        conn.commit()
+    except sqlite3.OperationalError as exc:
+        if str(exc).lower() != 'not an error':
+            raise
 
 
 @roster_business_bp.before_app_request
 def ensure_business_tables():
-    _init_tables()
+    if current_app.config.get('BUSINESS_TABLES_READY'):
+        return
+    with _business_tables_lock:
+        if current_app.config.get('BUSINESS_TABLES_READY'):
+            return
+        _init_tables()
+        current_app.config['BUSINESS_TABLES_READY'] = True
 
 
 @roster_business_bp.route('/api/roster/tv-deals', methods=['GET', 'POST'])

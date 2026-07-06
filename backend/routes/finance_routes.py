@@ -5,6 +5,8 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request
 
+from services.finance_enterprise import FinanceEnterpriseService
+
 
 finance_bp = Blueprint('finance_api', __name__)
 
@@ -13,7 +15,7 @@ _tables_ensured = False
 DEFAULT_SETTINGS = {
     'ppv_price': 49.99,
     'show_ticket_prices': {
-        'weekly_tv': 50,
+        'weekly_tv': 100,
         'minor_ppv': 75,
         'major_ppv': 100,
     },
@@ -22,6 +24,23 @@ DEFAULT_SETTINGS = {
         'lower_bowl': 80,
         'upper_bowl': 45,
         'premium': 180,
+    },
+    'budget_allocations': {
+        'wrestler_salaries': 70000,
+        'production_expenses': 40000,
+        'venue_rentals': 18000,
+        'staff_payroll': 20000,
+        'travel': 10000,
+        'marketing': 12000,
+        'merchandise_production': 15000,
+    },
+}
+
+LEGACY_DEFAULT_SETTINGS = {
+    'show_ticket_prices': {
+        'weekly_tv': 50,
+        'minor_ppv': 75,
+        'major_ppv': 100,
     },
     'budget_allocations': {
         'wrestler_salaries': 90000,
@@ -41,6 +60,10 @@ def get_database():
 
 def get_universe():
     return current_app.config['UNIVERSE']
+
+
+def _enterprise_service():
+    return FinanceEnterpriseService(get_database())
 
 
 def _game_period(db):
@@ -184,12 +207,21 @@ def _load_settings(db):
     show_ticket_prices = json.loads(data.get('show_ticket_prices_json') or '{}')
     ticket_tiers = json.loads(data.get('ticket_tiers_json') or '{}')
     budget_allocations = json.loads(data.get('budget_allocations_json') or '{}')
-    return {
+    merged = {
         'ppv_price': float(data.get('ppv_price', DEFAULT_SETTINGS['ppv_price'])),
         'show_ticket_prices': {**DEFAULT_SETTINGS['show_ticket_prices'], **show_ticket_prices},
         'ticket_tiers': {**DEFAULT_SETTINGS['ticket_tiers'], **ticket_tiers},
         'budget_allocations': {**DEFAULT_SETTINGS['budget_allocations'], **budget_allocations},
     }
+
+    if merged['show_ticket_prices'].get('weekly_tv') == LEGACY_DEFAULT_SETTINGS['show_ticket_prices']['weekly_tv']:
+        merged['show_ticket_prices']['weekly_tv'] = DEFAULT_SETTINGS['show_ticket_prices']['weekly_tv']
+
+    for key, legacy_value in LEGACY_DEFAULT_SETTINGS['budget_allocations'].items():
+        if merged['budget_allocations'].get(key) == legacy_value:
+            merged['budget_allocations'][key] = DEFAULT_SETTINGS['budget_allocations'][key]
+
+    return merged
 
 
 def _save_settings(db, payload):
@@ -693,6 +725,7 @@ def _dashboard_payload():
         'difficulty': risk,
         'settlement': settlement,
         'ledger': ledger,
+        'enterprise': _enterprise_service().enterprise_dashboard(),
     }
 
 
@@ -700,6 +733,204 @@ def _dashboard_payload():
 def api_finance_dashboard():
     try:
         return jsonify(_dashboard_payload())
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/transactions', methods=['GET'])
+def api_finance_transactions():
+    try:
+        return jsonify({'success': True, 'transactions': _enterprise_service().list_transactions()})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/transactions', methods=['POST'])
+def api_create_finance_transaction():
+    try:
+        transaction = _enterprise_service().post_transaction(request.get_json() or {})
+        return jsonify({'success': True, 'transaction': transaction})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsorships', methods=['GET'])
+def api_enterprise_sponsorships():
+    try:
+        return jsonify({'success': True, **_enterprise_service().list_sponsorships()})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsors', methods=['POST'])
+def api_create_sponsor_profile():
+    try:
+        sponsor = _enterprise_service().create_sponsor(request.get_json() or {})
+        return jsonify({'success': True, 'sponsor': sponsor})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsorships/<sponsor_id>/contracts', methods=['POST'])
+def api_create_sponsorship_contract(sponsor_id):
+    try:
+        contract = _enterprise_service().create_contract(sponsor_id, request.get_json() or {})
+        return jsonify({'success': True, 'contract': contract})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsorship-requirements/<requirement_id>/deliverables', methods=['POST'])
+def api_record_sponsorship_deliverable(requirement_id):
+    try:
+        progress = _enterprise_service().record_deliverable(requirement_id, request.get_json() or {})
+        return jsonify({'success': True, 'progress': progress})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsorships/<sponsor_id>/controversies', methods=['POST'])
+def api_record_sponsorship_controversy(sponsor_id):
+    try:
+        result = _enterprise_service().record_controversy(sponsor_id, request.get_json() or {})
+        return jsonify({'success': True, **result})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/sponsorship-contracts/<contract_id>/payments', methods=['POST'])
+def api_process_sponsorship_payment(contract_id):
+    try:
+        result = _enterprise_service().process_sponsorship_payment(contract_id, request.get_json() or {})
+        return jsonify({'success': True, **result})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/venues-tours', methods=['GET'])
+def api_finance_venues_tours():
+    try:
+        return jsonify({'success': True, **_enterprise_service().list_venues_tours()})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/venue-upgrades', methods=['POST'])
+def api_purchase_venue_upgrade():
+    try:
+        result = _enterprise_service().purchase_upgrade(request.get_json() or {})
+        return jsonify({'success': True, **result})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/tours', methods=['POST'])
+def api_create_finance_tour():
+    try:
+        tour = _enterprise_service().create_tour(request.get_json() or {})
+        return jsonify({'success': True, 'tour': tour})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/tours/<tour_id>/optimize', methods=['POST'])
+def api_optimize_finance_tour(tour_id):
+    try:
+        return jsonify({'success': True, **_enterprise_service().optimize_tour(tour_id)})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/settlements/event/<event_id>', methods=['POST'])
+def api_settle_finance_event(event_id):
+    try:
+        settlement = _enterprise_service().settle_event(event_id, request.get_json() or {})
+        return jsonify({'success': True, 'settlement': settlement})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/settlements/tour/<tour_id>', methods=['POST'])
+def api_settle_finance_tour(tour_id):
+    try:
+        settlement = _enterprise_service().settle_tour(tour_id, request.get_json() or {})
+        return jsonify({'success': True, 'settlement': settlement})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/reports/profitability')
+def api_finance_profitability_report():
+    try:
+        return jsonify({'success': True, 'report': _enterprise_service().profitability_report()})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/reports/budget-variance')
+def api_finance_budget_variance_report():
+    try:
+        period = request.args.get('period', 'current_quarter')
+        return jsonify({'success': True, 'report': _enterprise_service().budget_variance_report(period)})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/forecasts')
+def api_finance_forecasts():
+    try:
+        return jsonify({'success': True, 'forecasts': _enterprise_service().forecasts()})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@finance_bp.route('/api/finance/reconcile', methods=['POST'])
+def api_finance_reconcile():
+    try:
+        transaction = _enterprise_service().reconcile(request.get_json() or {})
+        return jsonify({'success': True, 'transaction': transaction})
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

@@ -43,6 +43,44 @@ def api_simulate_show():
         
         show_result = show_simulator.simulate_show(show_draft, universe)
 
+        try:
+            from services.booking_story_media_service import BookingStoryMediaService
+            media_service = current_app.config.get('BOOKING_STORY_MEDIA_SERVICE')
+            if media_service is None:
+                media_service = BookingStoryMediaService(database)
+                current_app.config['BOOKING_STORY_MEDIA_SERVICE'] = media_service
+            media_service.process_show_result(show_draft, show_result, universe)
+        except Exception as integration_error:
+            print(f"Booking/story/media integration warning: {integration_error}")
+
+        dynamic_event_result = {"triggered": False, "events": []}
+        try:
+            from services.simulation_expansion_service import SimulationExpansionService
+
+            simulation_service = current_app.config.get('SIMULATION_EXPANSION_SERVICE')
+            if simulation_service is None:
+                simulation_service = SimulationExpansionService(database)
+                current_app.config['SIMULATION_EXPANSION_SERVICE'] = simulation_service
+
+            dynamic_event_result = simulation_service.dynamic_event_pulse({
+                "context": "show_simulation",
+                "origin": "show_simulation",
+                "year": show_draft.year,
+                "week": show_draft.week,
+                "brand": show_draft.brand,
+                "show_id": show_draft.show_id,
+                "show_name": show_draft.show_name,
+                "chance": 0.28 if show_draft.is_ppv else 0.16,
+                "allow_multiple_open": True,
+            })
+            for event in dynamic_event_result.get("events", []):
+                show_result.add_event(
+                    'dynamic_event',
+                    f"SHOCK EVENT: {event.get('title', 'A dynamic event disrupted the show')}"
+                )
+        except Exception as dynamic_error:
+            print(f"Dynamic event integration warning: {dynamic_error}")
+
         if injury_manager:
             print("\n🏥 Processing injury recovery...")
             recovery_updates = injury_manager.process_weekly_recovery(
@@ -73,6 +111,25 @@ def api_simulate_show():
         database.save_show_result(show_result)
         
         universe.save_all()
+
+        post_show_fallout = None
+        try:
+            from services.post_show_fallout_service import PostShowFalloutService
+
+            fallout_service = current_app.config.get('POST_SHOW_FALLOUT_SERVICE')
+            if fallout_service is None:
+                fallout_service = PostShowFalloutService(database)
+                current_app.config['POST_SHOW_FALLOUT_SERVICE'] = fallout_service
+            post_show_fallout = fallout_service.generate_for_show(
+                show_draft,
+                show_result,
+                universe=universe,
+                seed=(request.get_json(silent=True) or {}).get('post_show_fallout_seed'),
+                force=bool((request.get_json(silent=True) or {}).get('force_post_show_fallout', False)),
+                autonomy_level=str((request.get_json(silent=True) or {}).get('autonomy_level', 'balanced')).lower(),
+            )
+        except Exception as fallout_error:
+            print(f"Post-show fallout warning: {fallout_error}")
         
         universe.calendar.advance_to_next_show()
         
@@ -93,7 +150,14 @@ def api_simulate_show():
         
         return jsonify({
             'success': True,
-            'show_result': show_result.to_dict()
+            'dynamic_events': dynamic_event_result,
+            'post_show_fallout': post_show_fallout,
+            'show_result': {
+                **show_result.to_dict(),
+                'dynamic_events': dynamic_event_result,
+                'media_business': getattr(show_result, 'media_business_result', None),
+                'post_show_fallout': (post_show_fallout or {}).get('report')
+            }
         })
     
     except Exception as e:

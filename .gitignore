@@ -27,6 +27,10 @@ requirements.txt.bak
 htmlcov/
 coverage/
 
+# Local test dependency/cache scratch
+test_tmp/site-packages/
+test_tmp/piptmp/
+
 # IDE
 .vscode/
 .idea/
@@ -38,3 +42,22 @@ coverage/
 .DS_Store
 Thumbs.db
 ```
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local dependency folders
+.codex_pydeps/
+vendor_pydeps/
+
+# Temporary test/runtime files
+test_tmp/
+*.db-shm
+*.db-wal
+
+# Save backups
+backend/data/saves/backups/

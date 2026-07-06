@@ -39,7 +39,23 @@ def create_show_production_tables(database):
     
     # Show types: weekly_tv, house_show, minor_ppv, major_ppv, supercard
     cursor.execute('''
-        INSERT OR IGNORE INTO show_templates VALUES
+        INSERT OR IGNORE INTO show_templates (
+            template_id,
+            show_type,
+            template_name,
+            brand,
+            default_duration_minutes,
+            default_match_count,
+            default_segment_count,
+            has_intermission,
+            intermission_minutes,
+            allows_commercials,
+            commercial_break_count,
+            ticket_price_base,
+            production_cost_base,
+            is_active,
+            created_at
+        ) VALUES
         ('tpl_weekly_alpha', 'weekly_tv', 'ROC Alpha Weekly', 'ROC Alpha', 120, 5, 3, 0, 0, 1, 3, 30, 5000, 1, datetime('now')),
         ('tpl_weekly_velocity', 'weekly_tv', 'ROC Velocity Weekly', 'ROC Velocity', 120, 5, 3, 0, 0, 1, 3, 30, 5000, 1, datetime('now')),
         ('tpl_weekly_vanguard', 'weekly_tv', 'ROC Vanguard Weekly', 'ROC Vanguard', 120, 5, 3, 0, 0, 1, 3, 30, 5000, 1, datetime('now')),

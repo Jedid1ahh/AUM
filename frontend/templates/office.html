@@ -268,8 +268,28 @@
 
 <script>
 (function() {
+    if (typeof window.viewCleanup === 'function') {
+        window.viewCleanup();
+    }
+
     let alertBadgeInterval = null;
     let contractAlertsInterval = null;
+
+    function byId(id) {
+        return document.getElementById(id);
+    }
+
+    function setText(id, value) {
+        const el = byId(id);
+        if (el) el.textContent = value;
+        return el;
+    }
+
+    function setHTML(id, value) {
+        const el = byId(id);
+        if (el) el.innerHTML = value;
+        return el;
+    }
 
     async function fetchAPI(endpoint, options) {
         if (typeof window.fetchAPI === 'function') {
@@ -504,17 +524,20 @@
             const response = await fetchAPI('/api/contracts/expiring?weeks=4');
             
             if (response.total === 0) {
-                document.getElementById('contractAlertsSection').style.display = 'none';
+                const emptySection = document.getElementById('contractAlertsSection');
+                if (emptySection) emptySection.style.display = 'none';
                 return;
             }
             
             // Show alerts section with animation
             const alertSection = document.getElementById('contractAlertsSection');
+            if (!alertSection) return;
             alertSection.style.display = 'block';
             alertSection.style.animation = 'slideDown 0.4s ease';
             
             // Update badge count
-            document.getElementById('alertCountBadge').textContent = `${response.total} Expiring`;
+            const alertCountBadge = document.getElementById('alertCountBadge');
+            if (alertCountBadge) alertCountBadge.textContent = `${response.total} Expiring`;
             
             let html = '';
             
@@ -551,7 +574,8 @@
                 `;
             });
             
-            document.getElementById('contractAlertsList').innerHTML = html;
+            const alertList = document.getElementById('contractAlertsList');
+            if (alertList) alertList.innerHTML = html;
             
         } catch (error) {
             console.error('Failed to load contract alerts:', error);
@@ -567,33 +591,34 @@
             const state = await fetchAPI('/api/universe/state');
             
             // Update header quick stats
-            document.getElementById('headerYear').textContent = state.year;
-            document.getElementById('headerWeek').textContent = state.week;
-            document.getElementById('headerBalance').textContent = `$${state.balance.toLocaleString()}`;
-            document.getElementById('headerRoster').textContent = state.total_roster;
+            setText('headerYear', state.year);
+            setText('headerWeek', state.week);
+            setText('headerBalance', `$${state.balance.toLocaleString()}`);
+            setText('headerRoster', state.total_roster);
             
             // Update main stats
-            document.getElementById('officePromotion').textContent = state.promotion;
-            document.getElementById('officeYear').textContent = state.year;
-            document.getElementById('officeWeek').textContent = state.week;
+            setText('officePromotion', state.promotion);
+            setText('officeYear', state.year);
+            setText('officeWeek', state.week);
             
             const balance = state.balance;
-            const balanceEl = document.getElementById('officeBalance');
-            balanceEl.textContent = `$${balance.toLocaleString()}`;
-            balanceEl.className = balance >= 0 ? 'stat-value money' : 'stat-value money negative';
+            const balanceEl = setText('officeBalance', `$${balance.toLocaleString()}`);
+            if (balanceEl) {
+                balanceEl.className = balance >= 0 ? 'stat-value money' : 'stat-value money negative';
+            }
             
-            document.getElementById('officeTotalRoster').textContent = state.total_roster;
-            document.getElementById('officeActiveFeud').textContent = state.active_feuds;
+            setText('officeTotalRoster', state.total_roster);
+            setText('officeActiveFeud', state.active_feuds);
             
             // Current/Next Show
             if (state.current_show) {
                 const show = state.current_show;
                 const showIcon = show.show_type.includes('ppv') ? '🎯' : '📺';
-                document.getElementById('officeNextShowName').innerHTML = `${showIcon} ${show.name}`;
-                document.getElementById('officeNextShowBrand').textContent = show.brand;
-                document.getElementById('officeNextShowType').textContent = show.show_type.replace('_', ' ').toUpperCase();
-                document.getElementById('officeNextShowDay').textContent = show.day_of_week;
-                document.getElementById('officeNextShowWeek').textContent = show.week;
+                setHTML('officeNextShowName', `${showIcon} ${show.name}`);
+                setText('officeNextShowBrand', show.brand);
+                setText('officeNextShowType', show.show_type.replace('_', ' ').toUpperCase());
+                setText('officeNextShowDay', show.day_of_week);
+                setText('officeNextShowWeek', show.week);
             }
             
             // Next PPV
@@ -627,8 +652,8 @@
         try {
             const preview = await fetchAPI('/api/booking/preview-next');
             
-            document.getElementById('availableWrestlers').textContent = preview.available_wrestlers;
-            document.getElementById('hotFeudsCount').textContent = preview.hot_feuds;
+            setText('availableWrestlers', preview.available_wrestlers);
+            setText('hotFeudsCount', preview.hot_feuds);
             
         } catch (error) {
             console.error('Failed to load show preview:', error);
@@ -646,23 +671,30 @@
             
             // Show the PPV card with animation
             const ppvCard = document.getElementById('nextPPVCard');
+            if (!ppvCard) return;
             ppvCard.style.display = 'block';
             ppvCard.style.animation = 'fadeIn 0.5s ease';
             
-            document.getElementById('nextPPVName').textContent = ppv.name;
-            document.getElementById('nextPPVWeek').textContent = `Week ${ppv.week}`;
-            document.getElementById('nextPPVBrand').textContent = ppv.brand;
+            const nextPPVName = document.getElementById('nextPPVName');
+            const nextPPVWeek = document.getElementById('nextPPVWeek');
+            const nextPPVBrand = document.getElementById('nextPPVBrand');
+            if (nextPPVName) nextPPVName.textContent = ppv.name;
+            if (nextPPVWeek) nextPPVWeek.textContent = `Week ${ppv.week}`;
+            if (nextPPVBrand) nextPPVBrand.textContent = ppv.brand;
             
             // Tier badge with enhanced styling
             const tierBadge = ppv.tier === 'major' ? 
                 '<span class="ppv-tier-badge major">⭐ MAJOR</span>' : 
                 '<span class="ppv-tier-badge minor">MINOR</span>';
-            document.getElementById('nextPPVTier').innerHTML = tierBadge;
+            const nextPPVTier = document.getElementById('nextPPVTier');
+            if (nextPPVTier) nextPPVTier.innerHTML = tierBadge;
             
             // Calculate shows away
             const showsAway = Math.max(0, (ppv.week - state.week) * 3);
-            document.getElementById('nextPPVShowsAway').textContent = `${showsAway} shows away`;
-            document.getElementById('nextPPVCountdown').textContent = showsAway;
+            const nextPPVShowsAway = document.getElementById('nextPPVShowsAway');
+            const nextPPVCountdown = document.getElementById('nextPPVCountdown');
+            if (nextPPVShowsAway) nextPPVShowsAway.textContent = `${showsAway} shows away`;
+            if (nextPPVCountdown) nextPPVCountdown.textContent = showsAway;
             
         } catch (error) {
             console.error('Failed to load next PPV:', error);
@@ -674,9 +706,11 @@
         try {
             const response = await fetchAPI('/api/calendar/upcoming-ppvs?count=8');
             const ppvs = response.ppvs;
+            const timeline = byId('upcomingPPVsTimeline');
+            if (!timeline) return;
             
             if (!ppvs || ppvs.length === 0) {
-                document.getElementById('upcomingPPVsTimeline').innerHTML = `
+                timeline.innerHTML = `
                     <div class="empty-timeline">
                         <i class="bi bi-calendar-x"></i>
                         <h5>No Upcoming Events</h5>
@@ -712,7 +746,7 @@
                 `;
             });
             
-            document.getElementById('upcomingPPVsTimeline').innerHTML = html;
+            timeline.innerHTML = html;
             
         } catch (error) {
             console.error('Failed to load upcoming PPVs:', error);
@@ -774,7 +808,9 @@
     // ========================================================================
 
     function showErrorState() {
-        document.getElementById('upcomingPPVsTimeline').innerHTML = `
+        const timeline = byId('upcomingPPVsTimeline');
+        if (!timeline) return;
+        timeline.innerHTML = `
             <div class="empty-timeline">
                 <i class="bi bi-exclamation-triangle text-danger"></i>
                 <h5>Connection Error</h5>
@@ -791,25 +827,30 @@
     // ========================================================================
 
     // Generate card button with loading state
-    document.getElementById('generateCardBtn').addEventListener('click', function() {
-        const btn = this;
-        const originalHTML = btn.innerHTML;
-        
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
-        btn.disabled = true;
-        
-        // Small delay for visual feedback
-        setTimeout(() => {
-            loadView('booking');
-        }, 300);
-    });
+    const generateCardBtn = byId('generateCardBtn');
+    if (generateCardBtn) {
+        generateCardBtn.addEventListener('click', function() {
+            const btn = this;
+            const originalHTML = btn.innerHTML;
+            
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+            btn.disabled = true;
+            
+            // Small delay for visual feedback
+            setTimeout(() => {
+                loadView('booking');
+            }, 300);
+        });
+    }
 
     // ========================================================================
     // CSS ANIMATIONS
     // ========================================================================
 
-    const styleSheet = document.createElement('style');
-    styleSheet.textContent = `
+    if (!document.getElementById('officeDashboardDynamicStyles')) {
+        const styleSheet = document.createElement('style');
+        styleSheet.id = 'officeDashboardDynamicStyles';
+        styleSheet.textContent = `
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -871,7 +912,8 @@
             border-left-color: #17a2b8;
         }
     `;
-    document.head.appendChild(styleSheet);
+        document.head.appendChild(styleSheet);
+    }
 
     // ========================================================================
     // EXPOSE FUNCTIONS TO GLOBAL WINDOW OBJECT

@@ -109,21 +109,6 @@
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="cawPersona" class="form-label">
-                                        <i class="bi bi-heart"></i> Persona *
-                                    </label>
-                                    <select 
-                                        class="form-select" 
-                                        id="cawPersona" 
-                                        name="persona"
-                                        required
-                                        onchange="updatePreview()"
-                                    >
-                                        <option value="Standard">Standard</option>
-                                    </select>
-                                </div>
-
-                                <div class="col-md-4 mb-3">
                                     <label for="cawRole" class="form-label">
                                         <i class="bi bi-star"></i> Role *
                                     </label>
@@ -662,7 +647,7 @@
             name: document.getElementById('cawName').value,
             age: parseInt(document.getElementById('cawAge').value),
             gender: document.getElementById('cawGender').value,
-                        role: document.getElementById('cawRole').value,
+            role: document.getElementById('cawRole').value,
             primary_brand: document.getElementById('cawBrand').value,
             brawling: parseInt(document.getElementById('cawBrawling').value),
             technical: parseInt(document.getElementById('cawTechnical').value),

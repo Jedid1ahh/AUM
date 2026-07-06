@@ -142,6 +142,9 @@
                                 <th>Name</th>
                                 <th>Brand</th>
                                 <th>Role</th>
+                                <th>Alignment</th>
+                                <th>Gimmick</th>
+                                <th>Rating</th>
                                 <th>W-L</th>
                                 <th>Overall</th>
                                 <th>Pop</th>
@@ -154,7 +157,7 @@
                         </thead>
                         <tbody id="rosterTableBody">
                             <tr>
-                                <td colspan="13" class="text-center">
+                                <td colspan="14" class="text-center">
                                     <div class="spinner-border" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
@@ -234,7 +237,7 @@
             if (tbody) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="12" class="text-center text-danger">
+                        <td colspan="14" class="text-center text-danger">
                             <i class="bi bi-exclamation-triangle"></i>
                             Failed to load roster: ${error.message}
                         </td>
@@ -289,7 +292,7 @@
         if (!wrestlers || wrestlers.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="11" class="text-center text-muted">
+                    <td colspan="14" class="text-center text-muted">
                         No wrestlers match the selected filters.
                     </td>
                 </tr>
@@ -325,6 +328,10 @@
             `;
             
             const brandBadge = `<span class="badge bg-secondary">${w.primary_brand.replace('ROC ', '')}</span>`;
+            const character = w.character || {};
+            const alignmentBadge = getAlignmentBadge(character.alignment_label || w.alignment, character.alignment_percentage);
+            const gimmickBadge = getGimmickBadge(character);
+            const ratingTrendBadge = getRatingTrendBadge(character.rating_trend);
             
             
             const popBadge = `<span class="badge ${getPopularityBadgeClass(w.stats.popularity)}">${w.stats.popularity}</span>`;
@@ -352,6 +359,9 @@
                     <td>${nameCell}</td>
                     <td>${brandBadge}</td>
                     <td>${w.role}</td>
+                    <td>${alignmentBadge}</td>
+                    <td>${gimmickBadge}</td>
+                    <td>${ratingTrendBadge}</td>
                     <td><strong>${record}</strong></td>
                     <td><strong>${w.attributes.overall}</strong></td>
                     <td>${popBadge}</td>
@@ -387,6 +397,36 @@
         if (pop >= 60) return 'bg-primary';
         if (pop >= 40) return 'bg-warning';
         return 'bg-secondary';
+    }
+
+    function getAlignmentBadge(label, percentage) {
+        const alignment = label || 'Tweener';
+        const pct = Number.isFinite(Number(percentage)) ? Number(percentage) : 50;
+        let badgeClass = 'bg-secondary';
+        if (alignment === 'Face') badgeClass = 'bg-primary';
+        if (alignment === 'Heel') badgeClass = 'bg-danger';
+        return `<span class="badge ${badgeClass}" title="Alignment percentage: ${pct}%">${alignment}</span>`;
+    }
+
+    function getGimmickBadge(character) {
+        if (!character || !character.gimmick_name) {
+            return '<span class="text-muted small">Unassigned</span>';
+        }
+        const fit = character.gimmick_effectiveness || 50;
+        const badgeClass = fit >= 75 ? 'bg-success' : (fit >= 50 ? 'bg-warning text-dark' : 'bg-danger');
+        return `<div><strong>${character.gimmick_name}</strong><br><span class="badge ${badgeClass}">${fit}% fit</span></div>`;
+    }
+
+    function getRatingTrendBadge(trend) {
+        if (!trend || !trend.attribute) {
+            return '<span class="text-muted small">No age change</span>';
+        }
+        const oldValue = Number(trend.old_value || 0);
+        const newValue = Number(trend.new_value || 0);
+        const delta = newValue - oldValue;
+        const badgeClass = delta >= 0 ? 'bg-success' : 'bg-danger';
+        const sign = delta >= 0 ? '+' : '';
+        return `<span class="badge ${badgeClass}" title="${trend.attribute}: ${oldValue} to ${newValue}">${sign}${delta} ${trend.attribute}</span>`;
     }
 
     function getMomentumBadgeClass(mom) {
@@ -556,6 +596,12 @@
                 });
                 titlesHTML += '</tbody></table></div>';
             }
+
+            const character = wrestler.character || {};
+            const ratingTrend = character.rating_trend;
+            const ratingTrendText = ratingTrend && ratingTrend.attribute
+                ? `${ratingTrend.attribute}: ${ratingTrend.old_value} -> ${ratingTrend.new_value} (${ratingTrend.reason || 'rating update'})`
+                : 'No recorded development or decline yet';
             
             modalBody.innerHTML = `
                 <div class="row">
@@ -567,6 +613,10 @@
                             <tr><th>Gender:</th><td>${wrestler.gender}</td></tr>
                             <tr><th>Brand:</th><td>${wrestler.primary_brand}</td></tr>
                             <tr><th>Role:</th><td>${wrestler.role}</td></tr>
+                            <tr><th>Alignment:</th><td>${getAlignmentBadge(character.alignment_label || wrestler.alignment, character.alignment_percentage)}</td></tr>
+                            <tr><th>Gimmick:</th><td>${getGimmickBadge(character)}</td></tr>
+                            <tr><th>Style:</th><td>${character.primary_wrestling_style || 'hybrid'}</td></tr>
+                            <tr><th>Home:</th><td>${character.kayfabe_hometown || character.nationality || '-'}</td></tr>
                             <tr><th>Major Star:</th><td>${wrestler.is_major_superstar ? '⭐ Yes' : 'No'}</td></tr>
                         </table>
                         
@@ -579,6 +629,7 @@
                             <tr><th>Mic:</th><td>${wrestler.attributes.mic}</td></tr>
                             <tr><th>Psychology:</th><td>${wrestler.attributes.psychology}</td></tr>
                             <tr><th>Stamina:</th><td>${wrestler.attributes.stamina}</td></tr>
+                            <tr><th>Development/Decline:</th><td>${ratingTrendText}</td></tr>
                         </table>
                     </div>
                     

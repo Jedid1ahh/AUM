@@ -82,10 +82,12 @@ class MatchDraft:
     importance: MatchImportance = MatchImportance.NORMAL
     feud_id: Optional[str] = None
     stipulation: Optional[str] = None  # 'No DQ', 'Cage Match', etc.
+    gender_division: Optional[str] = None  # 'male', 'female', 'intergender'
     
     # STEP 14: New fields
     referee_id: Optional[str] = None
     special_match_type: Optional[str] = None  # 'steel_cage', 'ladder_match', etc.
+    planned_duration_minutes: Optional[int] = None
     
     # FIX: Add booked_winner field
     booked_winner: Optional[str] = None  # wrestler id or None for random
@@ -107,8 +109,10 @@ class MatchDraft:
             'importance': self.importance.value,
             'feud_id': self.feud_id,
             'stipulation': self.stipulation,
+            'gender_division': self.gender_division,
             'referee_id': self.referee_id,
             'special_match_type': self.special_match_type,
+            'planned_duration_minutes': self.planned_duration_minutes,
             'booked_winner': self.booked_winner,
             'booked_runner_up': self.booked_runner_up,
             'booked_iron_man': self.booked_iron_man,
@@ -130,8 +134,10 @@ class MatchDraft:
             importance=MatchImportance(data.get('importance', 'normal')),
             feud_id=data.get('feud_id'),
             stipulation=data.get('stipulation'),
+            gender_division=data.get('gender_division'),
             referee_id=data.get('referee_id'),
             special_match_type=data.get('special_match_type'),
+            planned_duration_minutes=data.get('planned_duration_minutes'),
             booked_winner=data.get('booked_winner'),
             booked_runner_up=data.get('booked_runner_up'),
             booked_iron_man=data.get('booked_iron_man'),

@@ -20,6 +20,25 @@ From repository root:
 python -m unittest backend.test_regressions
 ```
 
+For the finance enterprise regression slice:
+
+```bash
+PYTHONUTF8=1 python -m unittest backend.test_regressions backend.test_finance_enterprise backend.test_phase_expansion
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:PYTHONUTF8='1'
+python -m unittest backend.test_regressions backend.test_finance_enterprise backend.test_phase_expansion
+```
+
+## Finance enterprise docs
+
+- `docs/AUDIT_REPORT.md`: current architecture, database, security, performance, and remediation findings.
+- `docs/FINANCE_ENTERPRISE_GUIDE.md`: sponsorship, venue/tour, settlement, and reporting workflows.
+- `docs/BOOKING_STORY_MEDIA_EXPANSION.md`: booking timeline, story engine, ratings, media, and business simulation APIs, jobs, persistence, and frontend testing.
+
 ## Developer notes
 
 - Follow repository-level `AGENTS.md` instructions when present.

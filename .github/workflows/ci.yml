@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile backend
+        run: python -m py_compile backend/routes/finance_routes.py backend/services/finance_enterprise.py backend/services/finance_enterprise_schema.py backend/test_finance_enterprise.py
+
+      - name: Run regression tests
+        env:
+          PYTHONUTF8: "1"
+        run: python -m unittest backend.test_regressions backend.test_finance_enterprise

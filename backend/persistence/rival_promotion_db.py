@@ -4,6 +4,8 @@ STEP 126: Persistence for rival promotions and bidding wars
 """
 
 import json
+import sqlite3
+import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -197,19 +199,8 @@ def create_rival_promotion_tables(database) -> None:
 
 def save_rival_promotion(database, promotion) -> None:
     """Insert or replace a rival promotion record."""
-    cursor = database.conn.cursor()
     now = datetime.now().isoformat()
-
-    cursor.execute('''
-        INSERT OR REPLACE INTO rival_promotions (
-            promotion_id, name, abbreviation, tier, brand_identity,
-            budget_per_year, remaining_budget, avg_salary_per_show,
-            roster_size, max_roster_size, roster_needs, gender_focus,
-            aggression, loyalty_to_talent, prestige, relationship_with_player,
-            active_pursuits, signed_this_year, lost_bidding_wars, won_bidding_wars,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
+    payload = (
         promotion.promotion_id,
         promotion.name,
         promotion.abbreviation,
@@ -230,9 +221,33 @@ def save_rival_promotion(database, promotion) -> None:
         promotion.signed_this_year,
         promotion.lost_bidding_wars,
         promotion.won_bidding_wars,
-        now, now
-    ))
-    database.conn.commit()
+        now,
+        now,
+    )
+
+    for attempt in range(3):
+        cursor = database.conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT OR REPLACE INTO rival_promotions (
+                    promotion_id, name, abbreviation, tier, brand_identity,
+                    budget_per_year, remaining_budget, avg_salary_per_show,
+                    roster_size, max_roster_size, roster_needs, gender_focus,
+                    aggression, loyalty_to_talent, prestige, relationship_with_player,
+                    active_pursuits, signed_this_year, lost_bidding_wars, won_bidding_wars,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', payload)
+            database.conn.commit()
+            return
+        except sqlite3.OperationalError as exc:
+            try:
+                database.conn.rollback()
+            except Exception:
+                pass
+            if 'locked' not in str(exc).lower() or attempt == 2:
+                raise
+            time.sleep(0.2 * (attempt + 1))
 
 
 def load_rival_promotions(database) -> List[Dict[str, Any]]:

@@ -69,6 +69,47 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="mt-3" id="profitProjectionPanel" style="display:none;">
+                    <div class="border rounded p-3 bg-light">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <strong>Weekly Profit Outlook</strong>
+                                <div class="small text-muted" id="projectionSubtitle">Calculating pre-show economics...</div>
+                            </div>
+                            <span class="badge bg-secondary" id="projectionStatusBadge">Pending</span>
+                        </div>
+                        <div class="row g-3 text-center mt-1">
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Attendance</small>
+                                <strong id="projectionAttendance">-</strong>
+                            </div>
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Payroll</small>
+                                <strong id="projectionPayroll">-</strong>
+                            </div>
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Venue</small>
+                                <strong id="projectionVenue">-</strong>
+                            </div>
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Production</small>
+                                <strong id="projectionProduction">-</strong>
+                            </div>
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Media Floor</small>
+                                <strong id="projectionMedia">-</strong>
+                            </div>
+                            <div class="col-sm-4 col-lg-2">
+                                <small class="text-muted d-block">Projected P/L</small>
+                                <strong id="projectionProfit">-</strong>
+                            </div>
+                        </div>
+                        <div class="small text-muted mt-2" id="projectionBreakdown">-</div>
+                        <div class="mt-3" id="projectionWarnings"></div>
+                        <div class="mt-2" id="projectionRecommendations"></div>
+                    </div>
+                </div>
                 
                 <!-- Action Buttons -->
                 <div class="mt-3 d-flex gap-2 flex-wrap">
@@ -98,6 +139,15 @@
                     <button class="btn btn-warning" onclick="regenerateCard()">
                         <i class="bi bi-arrow-clockwise"></i> Regenerate All
                     </button>
+                    <button class="btn btn-outline-success" onclick="loadShowrunnerDraftIntoBooking(true)">
+                        <i class="bi bi-magic"></i> Load Booker AI Draft
+                    </button>
+                    <button class="btn btn-outline-info" onclick="generatePromoDialogueBeats()">
+                        <i class="bi bi-chat-quote"></i> Promo Beats
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="forceLiveInterruptionPreview()">
+                        <i class="bi bi-broadcast"></i> Force Live Shock
+                    </button>
                     <button class="btn btn-outline-warning" onclick="generateSegments()">
                         <i class="bi bi-lightning"></i> Auto-Segments
                     </button>
@@ -114,6 +164,31 @@
 </div>
 
 
+<!-- Booking Timeline Builder -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card border-info shadow-sm">
+            <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Time Slot Allocation</h5>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success" id="timelineAvailableBadge">0 min available</span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="saveBookingTimelinePlan()">
+                        <i class="bi bi-save"></i> Save Timeline
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3" style="height: 18px;" id="timelineProgress"></div>
+                <div id="bookingTimelineList" class="vstack gap-2">
+                    <div class="text-muted small">Timeline will appear after the show card loads.</div>
+                </div>
+                <div id="timelineWarnings" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <!-- LegacyMania Control Panel -->
 <div class="row mb-4">
   <div class="col-md-12">
@@ -123,7 +198,7 @@
         <button class="btn btn-sm btn-outline-dark" onclick="loadLegacyManiaPanel()">Refresh</button>
       </div>
       <div class="card-body">
-        <div class="small text-muted mb-2">Assign Men's and Women's Rumble winners to LegacyMania Night 1 or Night 2 world-title challenges.</div>
+        <div class="small text-muted mb-2">Track and assign Rumble Royale and Elimination Chamber winners into the LegacyMania world-title picture.</div>
         <div id="legacyManiaPanel">Loading LegacyMania opportunities...</div>
       </div>
     </div>
@@ -385,6 +460,8 @@
     var allFactions = {};
     var factionsList = [];
     var productionPlan = null;
+    var currentEconomicsProjection = null;
+    var economicsRefreshToken = 0;
     var currentGenderDivision = 'male'; // 'male', 'female', 'intergender'
     var segmentTypeCatalogue = [];
     var segmentTypeMap = {};
@@ -402,6 +479,7 @@
             'trios_tag': { label: "Men's Trios Tag (3 vs 3)", teams: true, count: 6, team_size: 3, num_teams: 2 },
             'triple_threat': { label: "Men's Triple Threat", teams: false, count: 3 },
             'fatal_4way': { label: "Men's Fatal Four-Way", teams: false, count: 4 },
+            'elimination_chamber': { label: "Men's Elimination Chamber", teams: false, count: 6 },
             'triple_threat_tag': { label: "Men's Triple Threat Tag", teams: true, count: 6 },
             'fatal_4way_tag': { label: "Men's Fatal Four-Way Tag", teams: true, count: 8 },
             'battle_royal': { label: "Men's Battle Royal", teams: false, count: '8-20' },
@@ -412,7 +490,9 @@
             'tag': { label: "Women's Tag Team Match", teams: true, count: 4 },
             'triple_threat': { label: "Women's Triple Threat", teams: false, count: 3 },
             'fatal_4way': { label: "Women's Fatal Four-Way", teams: false, count: 4 },
-            'battle_royal': { label: "Women's Battle Royal", teams: false, count: '8-15' }
+            'elimination_chamber': { label: "Women's Elimination Chamber", teams: false, count: 6 },
+            'battle_royal': { label: "Women's Battle Royal", teams: false, count: '8-15' },
+            'rumble': { label: "Women's Royal Rumble", teams: false, count: 30 }
         },
         'intergender': {
             'mixed_tag': { label: "Mixed Tag Team Match (1M+1F vs 1M+1F)", teams: true, count: 4, special: 'mixed' },
@@ -423,6 +503,39 @@
     // ========================================================================
     // INITIALIZATION
     // ========================================================================
+
+    function setTextIfPresent(id, value) {
+        var element = document.getElementById(id);
+        if (element) element.textContent = value;
+    }
+
+    function setHTMLIfPresent(id, value) {
+        var element = document.getElementById(id);
+        if (element) element.innerHTML = value;
+    }
+
+    function getRequiredParticipantCount(matchType) {
+        if (matchType === 'elimination_chamber') return 6;
+        if (matchType === 'triple_threat') return 3;
+        if (matchType === 'fatal_4way') return 4;
+        return 0;
+    }
+
+    function collectParticipantIds(participants) {
+        var ids = [];
+        (participants || []).forEach(function(participant) {
+            if (typeof participant === 'string') {
+                ids.push(participant);
+            } else if (Array.isArray(participant)) {
+                participant.forEach(function(id) { if (id) ids.push(id); });
+            } else if (participant && typeof participant === 'object') {
+                ['male', 'female'].forEach(function(key) {
+                    if (participant[key]) ids.push(participant[key]);
+                });
+            }
+        });
+        return ids;
+    }
     
     async function loadBookingView() {
         console.log('Loading enhanced booking view...');
@@ -434,6 +547,16 @@
             await loadTagTeamData();
             await loadFactionData();
             await loadSegmentTypeCatalogue();
+
+            var shouldUseShowrunnerDraft = false;
+            try {
+                shouldUseShowrunnerDraft = sessionStorage.getItem('awumUseShowrunnerDraft') === '1';
+                if (shouldUseShowrunnerDraft) sessionStorage.removeItem('awumUseShowrunnerDraft');
+            } catch (e) {}
+            if (shouldUseShowrunnerDraft) {
+                var loadedAiDraft = await loadShowrunnerDraftIntoBooking(false);
+                if (loadedAiDraft) return;
+            }
             
             // Generate show card with production plan
             var response = await fetch('/api/booking/generate', {
@@ -450,14 +573,21 @@
             
             currentShowDraft = normalizeShowDraftForUI(data.show_draft);
             productionPlan = data.production_plan || null;
+            currentEconomicsProjection = data.economics_projection || null;
             
             // Ensure segments array exists
             if (!currentShowDraft.segments) {
                 currentShowDraft.segments = [];
             }
+
+            if (!document.getElementById('showCardList')) {
+                console.warn('Booking view was unloaded before the card finished loading.');
+                return;
+            }
             
             renderShowInfo(currentShowDraft);
             renderProductionPlan(productionPlan);
+            renderEconomicsProjection(currentEconomicsProjection);
             renderFullCard();
             loadLegacyManiaPanel();
 
@@ -472,15 +602,159 @@
                 }
             } catch (e) {}
             
-            document.getElementById('runShowBtn').disabled = false;
+            var runButton = document.getElementById('runShowBtn');
+            if (runButton) runButton.disabled = false;
             
         } catch (error) {
             console.error('Failed to generate card:', error);
-            document.getElementById('showCardList').innerHTML = 
+            setHTMLIfPresent('showCardList',
                 '<div class="alert alert-danger">' +
                 '<i class="bi bi-exclamation-triangle"></i> ' +
                 '<strong>Failed to generate card:</strong> ' + error.message +
-                '</div>';
+                '</div>'
+            );
+        }
+    }
+
+    async function loadShowrunnerDraftIntoBooking(showNoDraftToast) {
+        try {
+            setHTMLIfPresent('showCardList',
+                '<div class="text-center py-5">' +
+                '<div class="spinner-border text-success" role="status"></div>' +
+                '<p class="mt-3">Loading Booker AI draft into the main Booking Office...</p>' +
+                '</div>'
+            );
+
+            var response = await fetch('/api/booker/showrunner/latest-booking-draft');
+            var data = await response.json();
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Could not load Booker AI draft');
+            }
+            if (!data.available || !data.show_draft) {
+                setHTMLIfPresent('showCardList',
+                    '<div class="alert alert-warning mb-0">' +
+                    '<i class="bi bi-exclamation-circle"></i> No Booker AI draft exists yet. Run AI Week from the AI Showrunner page first.' +
+                    '</div>'
+                );
+                if (showNoDraftToast && window.showToast) showToast(data.message || 'No Booker AI draft available yet', 'warning');
+                return false;
+            }
+
+            currentShowDraft = normalizeShowDraftForUI(data.show_draft);
+            productionPlan = data.production_plan || null;
+            currentEconomicsProjection = data.economics_projection || null;
+            if (!currentShowDraft.segments) currentShowDraft.segments = [];
+            if (!currentShowDraft.matches) currentShowDraft.matches = [];
+
+            if (!document.getElementById('showCardList')) {
+                console.warn('Booking view was unloaded before the AI draft finished loading.');
+                return true;
+            }
+
+            renderShowInfo(currentShowDraft);
+            renderProductionPlan(productionPlan);
+            renderEconomicsProjection(currentEconomicsProjection);
+            renderFullCard();
+            loadLegacyManiaPanel();
+            refreshEconomicsProjection();
+
+            var runButton = document.getElementById('runShowBtn');
+            if (runButton) runButton.disabled = currentShowDraft.matches.length < 3;
+
+            if (window.showToast) {
+                showToast('Loaded Booker AI draft into Booking Office', 'success');
+            }
+            return true;
+        } catch (error) {
+            console.error('Could not load Booker AI draft:', error);
+            setHTMLIfPresent('showCardList',
+                '<div class="alert alert-danger mb-0">' +
+                '<i class="bi bi-exclamation-triangle"></i> ' +
+                '<strong>Booker AI draft failed:</strong> ' + error.message +
+                '</div>'
+            );
+            if (showNoDraftToast && window.showToast) showToast('Booker AI draft failed: ' + error.message, 'danger');
+            return false;
+        }
+    }
+
+    function applyPromoBeatsToSegments(beats) {
+        var applied = 0;
+        if (!currentShowDraft || !currentShowDraft.segments) return applied;
+        (beats || []).forEach(function(beat) {
+            var sourceId = beat.source_id;
+            var target = currentShowDraft.segments.find(function(segment) {
+                return segment.segment_id === sourceId || segment.id === sourceId;
+            });
+            if (!target) {
+                target = currentShowDraft.segments.find(function(segment) {
+                    return ['promo', 'interview', 'contract_signing', 'confrontation', 'announcement', 'vignette'].indexOf(segment.segment_type) !== -1 &&
+                        !segment.dialogue_beats;
+                });
+            }
+            if (!target) return;
+            target.description = beat.hook_text || target.description;
+            target.dialogue_beats = beat.lines_json || [];
+            target.crowd_goal = beat.crowd_goal;
+            target.promo_beat_id = beat.id;
+            applied += 1;
+        });
+        return applied;
+    }
+
+    async function generatePromoDialogueBeats() {
+        if (!currentShowDraft) {
+            showToast('Load or generate a card first', 'warning');
+            return;
+        }
+        try {
+            var response = await fetch('/api/booker/showrunner/promo-beats', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    show_draft: serializeShowDraftForBackend(currentShowDraft),
+                    force: true
+                })
+            });
+            var data = await response.json();
+            if (!response.ok || data.error) throw new Error(data.error || 'Failed to generate promo beats');
+            var applied = applyPromoBeatsToSegments(data.beats || []);
+            renderFullCard();
+            showToast('Generated ' + (data.total || 0) + ' promo beat(s), applied ' + applied + ' to this card', 'success');
+        } catch (error) {
+            console.error('Promo beat generation failed:', error);
+            showToast('Promo beat generation failed: ' + error.message, 'danger');
+        }
+    }
+
+    async function forceLiveInterruptionPreview() {
+        if (!currentShowDraft) {
+            showToast('Load or generate a card first', 'warning');
+            return;
+        }
+        try {
+            var response = await fetch('/api/booker/showrunner/live-interruption', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    show_draft: serializeShowDraftForBackend(currentShowDraft),
+                    force: true
+                })
+            });
+            var data = await response.json();
+            if (!response.ok || data.error) throw new Error(data.error || 'Failed to create live interruption');
+            if (data.inserted && data.show_draft) {
+                currentShowDraft = normalizeShowDraftForUI(data.show_draft);
+                renderShowInfo(currentShowDraft);
+                renderFullCard();
+                var intr = data.interruption || {};
+                showToast('Live shock inserted: ' + (intr.interruption_type || 'surprise'), 'warning');
+            } else {
+                showToast(data.reason || 'No live interruption triggered', 'info');
+            }
+        } catch (error) {
+            console.error('Live interruption failed:', error);
+            showToast('Live interruption failed: ' + error.message, 'danger');
         }
     }
     
@@ -678,10 +952,13 @@
 
     function inferTitleDivision(title) {
         var explicitDivision = (title.division || '').toLowerCase();
+        if (explicitDivision === 'mens' || explicitDivision === "men's") return 'male';
+        if (explicitDivision === 'womens' || explicitDivision === "women's") return 'female';
         if (explicitDivision) return explicitDivision;
 
         var titleType = (title.title_type || '').toLowerCase();
-        if (titleType.indexOf('women') !== -1) return 'female';
+        var titleName = (title.name || title.title_name || '').toLowerCase();
+        if (titleType.indexOf('women') !== -1 || titleName.indexOf('women') !== -1) return 'female';
         if (titleType.indexOf('intergender') !== -1 || titleType.indexOf('mixed') !== -1) return 'intergender';
         return 'male';
     }
@@ -696,6 +973,7 @@
             current_brand: title.current_brand || title.assigned_brand || title.brand || '',
             division: inferTitleDivision(title),
             current_champion_id: title.current_champion_id || title.current_holder_id || title.effective_champion_id || null,
+            current_champion_name: title.current_champion_name || title.current_holder_display || title.current_holder_name || title.effective_champion_name || null,
             prestige_level: title.prestige_level != null ? title.prestige_level : (title.prestige != null ? title.prestige : 0)
         });
     }
@@ -707,6 +985,23 @@
     function getWrestlerName(wrestlerId) {
         var wrestler = allWrestlers[wrestlerId];
         return wrestler ? (wrestler.name || wrestler.ring_name || wrestlerId) : wrestlerId;
+    }
+
+    function sameSet(a, b) {
+        if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+        var values = new Set(a);
+        for (var i = 0; i < b.length; i++) {
+            if (!values.has(b[i])) return false;
+        }
+        return true;
+    }
+
+    function getTeamDisplayLabel(memberIds, explicitLabel) {
+        var names = (memberIds || []).filter(Boolean).map(getWrestlerName);
+        if (explicitLabel && explicitLabel !== 'Custom Team') {
+            return explicitLabel;
+        }
+        return names.join(' & ');
     }
 
     function getParticipantIds(participants) {
@@ -806,6 +1101,19 @@
             }
         }
 
+        if (normalized.booked_winner && Array.isArray(normalized.participants)) {
+            normalized.participants.forEach(function(participant) {
+                if (Array.isArray(participant) && participant.indexOf(normalized.booked_winner) !== -1) {
+                    normalized.booked_winner = participant[0];
+                } else if (participant && typeof participant === 'object') {
+                    var mixedTeamIds = [participant.male, participant.female].filter(Boolean);
+                    if (mixedTeamIds.indexOf(normalized.booked_winner) !== -1) {
+                        normalized.booked_winner = mixedTeamIds[0];
+                    }
+                }
+            });
+        }
+
         normalized.gender_division = normalized.gender_division || inferMatchDivision(normalized.participants);
         normalized.is_intergender = normalized.is_intergender != null
             ? normalized.is_intergender
@@ -886,6 +1194,7 @@
 
         if (match.match_type === 'triple_threat' ||
             match.match_type === 'fatal_4way' ||
+            match.match_type === 'elimination_chamber' ||
             match.match_type === 'triple_threat_tag' ||
             match.match_type === 'fatal_4way_tag' ||
             match.match_type === 'battle_royal' ||
@@ -902,8 +1211,42 @@
         return null;
     }
 
+    function applyMultiTeamBiasPreference(match) {
+        if (!match || !Array.isArray(match.participants)) return match;
+        if (match.match_type !== 'triple_threat_tag' && match.match_type !== 'fatal_4way_tag') {
+            return match;
+        }
+
+        var bookingBias = match.booking_bias || 'even';
+        var matchInfo = bookingBias.match(/^(strong|slight)_team_(\d+)$/);
+        if (!matchInfo) return match;
+
+        var strength = matchInfo[1];
+        var preferredIndex = parseInt(matchInfo[2], 10);
+        if (!Number.isFinite(preferredIndex) || preferredIndex < 0 || preferredIndex >= match.participants.length) {
+            return match;
+        }
+
+        var reordered = Object.assign({}, match);
+        reordered.participants = match.participants.slice();
+        var favoredTeam = reordered.participants.splice(preferredIndex, 1)[0];
+        reordered.participants.unshift(favoredTeam);
+
+        if (Array.isArray(match.team_units)) {
+            reordered.team_units = match.team_units.slice();
+            var favoredMeta = reordered.team_units.splice(preferredIndex, 1)[0];
+            reordered.team_units.unshift(favoredMeta);
+        }
+
+        reordered.booking_bias = strength + '_a';
+        if (reordered.booked_winner && Array.isArray(favoredTeam) && favoredTeam.indexOf(reordered.booked_winner) !== -1) {
+            reordered.booked_winner = favoredTeam[0];
+        }
+        return reordered;
+    }
+
     function serializeMatchForBackend(match, index) {
-        var normalized = normalizeUiMatch(match, index);
+        var normalized = applyMultiTeamBiasPreference(normalizeUiMatch(match, index));
         var participants = normalized.participants || [];
         var sideAIds = [];
         var sideBIds = [];
@@ -924,6 +1267,7 @@
             });
         } else if (normalized.match_type === 'triple_threat' ||
                    normalized.match_type === 'fatal_4way' ||
+                   normalized.match_type === 'elimination_chamber' ||
                    normalized.match_type === 'battle_royal' ||
                    normalized.match_type === 'rumble') {
             sideAIds = participants.slice();
@@ -954,6 +1298,7 @@
             feud_id: normalized.feud_id || null,
             stipulation: normalized.special_stipulation || normalized.stipulation || null,
             special_match_type: normalized.special_stipulation || normalized.special_match_type || normalized.stipulation || null,
+            planned_duration_minutes: normalized.planned_duration_minutes || normalized.duration || null,
             booked_winner: serializeBookedWinner(normalized, sideAIds, sideBIds)
         };
     }
@@ -1047,6 +1392,87 @@
         // Runtime
         document.getElementById('showRuntime').textContent = (plan.total_runtime_minutes || 120) + ' min';
         document.getElementById('targetMatches').textContent = plan.target_matches || 5;
+    }
+
+    function formatMoney(value) {
+        return '$' + (parseInt(value || 0, 10)).toLocaleString();
+    }
+
+    function renderProjectionList(elementId, rows, alertClass, emptyText) {
+        var container = document.getElementById(elementId);
+        if (!container) return;
+        if (!rows || !rows.length) {
+            container.innerHTML = '<div class="small text-muted">' + emptyText + '</div>';
+            return;
+        }
+        container.innerHTML = rows.map(function(row) {
+            return '<div class="alert ' + alertClass + ' py-2 mb-2">' + row + '</div>';
+        }).join('');
+    }
+
+    function renderEconomicsProjection(projection) {
+        var panel = document.getElementById('profitProjectionPanel');
+        if (!panel) return;
+        if (!projection) {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+
+        var profit = projection.projected_net_profit || 0;
+        var statusBadge = document.getElementById('projectionStatusBadge');
+        var profitEl = document.getElementById('projectionProfit');
+
+        document.getElementById('projectionSubtitle').textContent =
+            (projection.brand || 'Show') + ' • ' +
+            (projection.show_type || 'weekly_tv').replace(/_/g, ' ').toUpperCase() +
+            ' • Margin ' + ((projection.projected_margin_pct || 0).toFixed(2)) + '%';
+        document.getElementById('projectionAttendance').textContent = (projection.projected_attendance || 0).toLocaleString();
+        document.getElementById('projectionPayroll').textContent = formatMoney(projection.expense_breakdown?.payroll || 0);
+        document.getElementById('projectionVenue').textContent = formatMoney(projection.expense_breakdown?.venue || 0);
+        document.getElementById('projectionProduction').textContent = formatMoney(projection.expense_breakdown?.production || 0);
+        document.getElementById('projectionMedia').textContent = formatMoney(projection.revenue_breakdown?.guaranteed_media_revenue || 0);
+
+        profitEl.textContent = formatMoney(profit);
+        profitEl.className = profit >= 0 ? 'text-success' : 'text-danger';
+
+        statusBadge.className = 'badge ' + (profit >= 0 ? 'bg-success' : 'bg-danger');
+        statusBadge.textContent = profit >= 0 ? 'Projected Profit' : 'Projected Loss';
+
+        document.getElementById('projectionBreakdown').textContent =
+            'Gate ' + formatMoney(projection.revenue_breakdown?.gate_revenue || 0) +
+            ' • Merch ' + formatMoney(projection.revenue_breakdown?.merchandise_revenue || 0) +
+            ' • Local Sponsors ' + formatMoney(projection.revenue_breakdown?.local_sponsorship_revenue || 0) +
+            ' • Soft Cap ' + formatMoney(projection.expense_breakdown?.salary_soft_cap || 0) +
+            ' • Over Cap ' + formatMoney(projection.expense_breakdown?.payroll_over_soft_cap || 0);
+
+        renderProjectionList('projectionWarnings', projection.warnings, 'alert-warning', 'No major cost warnings right now.');
+        renderProjectionList('projectionRecommendations', projection.recommendations, 'alert-info', 'No extra booking recommendations.');
+    }
+
+    async function refreshEconomicsProjection() {
+        if (!currentShowDraft) return;
+
+        var token = ++economicsRefreshToken;
+        try {
+            var response = await fetch('/api/booking/projection', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    show_draft: serializeShowDraftForBackend(currentShowDraft)
+                })
+            });
+            var data = await response.json();
+            if (token !== economicsRefreshToken) return;
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to project show economics');
+            }
+            currentEconomicsProjection = data.projection || null;
+            renderEconomicsProjection(currentEconomicsProjection);
+        } catch (error) {
+            console.error('Failed to refresh economics projection:', error);
+        }
     }
     
     // ========================================================================
@@ -1565,6 +1991,223 @@ function renderWrestlerDropdown(id, wrestlers, genderFilter) {
 // UPDATE WINNER DROPDOWN (DYNAMIC BASED ON SELECTED WRESTLERS)
 // ========================================================================
 
+function getCurrentTeamEntries() {
+    var entries = [];
+
+    if (document.getElementById('teamA_male') || document.getElementById('teamB_male')) {
+        ['A', 'B'].forEach(function(letter) {
+            var male = document.getElementById('team' + letter + '_male');
+            var female = document.getElementById('team' + letter + '_female');
+            var ids = [male ? male.value : '', female ? female.value : ''].filter(Boolean);
+            if (!ids.length) return;
+
+            entries.push({
+                type: 'team',
+                key: 'team_' + entries.length,
+                value: ids[0],
+                wrestlerIds: ids,
+                label: getTeamDisplayLabel(ids)
+            });
+        });
+        return entries;
+    }
+
+    for (var idx = 0; idx < 8; idx++) {
+        var letter = String.fromCharCode(65 + idx);
+        var firstMember = document.getElementById('team' + letter + '_1');
+        if (!firstMember) break;
+
+        var memberIds = [];
+        for (var memberIndex = 1; memberIndex <= 4; memberIndex++) {
+            var memberSelect = document.getElementById('team' + letter + '_' + memberIndex);
+            if (!memberSelect) break;
+            if (memberSelect.value) memberIds.push(memberSelect.value);
+        }
+        if (!memberIds.length) continue;
+
+        var explicitLabel = '';
+        var unitSelect = document.getElementById('team' + letter + '_unit');
+        var unitValue = unitSelect ? (unitSelect.value || '') : '';
+        if (unitValue.indexOf('tag:') === 0) {
+            var tagTeam = allTagTeams[unitValue.split(':')[1]];
+            explicitLabel = tagTeam && tagTeam.team_name ? tagTeam.team_name : '';
+        } else if (unitValue.indexOf('faction:') === 0) {
+            var faction = allFactions[unitValue.split(':')[1]];
+            explicitLabel = faction ? (faction.faction_name || faction.name || '') : '';
+        }
+
+        entries.push({
+            type: 'team',
+            key: 'team_' + entries.length,
+            value: memberIds[0],
+            wrestlerIds: memberIds,
+            label: getTeamDisplayLabel(memberIds, explicitLabel)
+        });
+    }
+
+    return entries;
+}
+
+function getCurrentCompetitorEntries() {
+    var teamEntries = getCurrentTeamEntries();
+    if (teamEntries.length) return teamEntries;
+
+    var battleRoyalSelect = document.getElementById('battleRoyalParticipants');
+    if (battleRoyalSelect) {
+        return Array.from(battleRoyalSelect.selectedOptions || []).map(function(opt) {
+            var wrestler = allWrestlers[opt.value];
+            return wrestler ? {
+                type: 'wrestler',
+                key: wrestler.id,
+                value: wrestler.id,
+                wrestlerIds: [wrestler.id],
+                label: wrestler.ring_name
+            } : null;
+        }).filter(Boolean);
+    }
+
+    var entries = [];
+    for (var i = 0; i < 8; i++) {
+        var select = document.getElementById('participant_' + i);
+        if (!select) break;
+        if (!select.value) continue;
+        var wrestler = allWrestlers[select.value];
+        if (!wrestler) continue;
+        entries.push({
+            type: 'wrestler',
+            key: wrestler.id,
+            value: wrestler.id,
+            wrestlerIds: [wrestler.id],
+            label: wrestler.ring_name
+        });
+    }
+    return entries;
+}
+
+function rebuildBookingBiasOptions(competitors) {
+    var biasSelect = document.getElementById('newMatchBias');
+    if (!biasSelect) return;
+
+    var previousValue = biasSelect.value || biasSelect.dataset.lastValue || 'even';
+    var options = [];
+
+    if (competitors.length === 2) {
+        options = [
+            { value: 'strong_a', label: competitors[0].label + ' (85% win chance)' },
+            { value: 'slight_a', label: competitors[0].label + ' (65% win chance)' },
+            { value: 'even', label: 'Even (50/50)' },
+            { value: 'slight_b', label: competitors[1].label + ' (65% win chance)' },
+            { value: 'strong_b', label: competitors[1].label + ' (85% win chance)' }
+        ];
+    } else if (competitors.length > 2 && competitors.every(function(entry) { return entry.type === 'team'; })) {
+        competitors.forEach(function(entry, index) {
+            options.push({ value: 'strong_team_' + index, label: entry.label + ' (85% win chance)' });
+            options.push({ value: 'slight_team_' + index, label: entry.label + ' (65% win chance)' });
+        });
+        options.splice(2, 0, { value: 'even', label: 'Even (50/50)' });
+    } else {
+        options = [
+            { value: 'strong_a', label: 'Strong Side A (85% win chance)' },
+            { value: 'slight_a', label: 'Slight Side A (65% win chance)' },
+            { value: 'even', label: 'Even (50/50)' },
+            { value: 'slight_b', label: 'Slight Side B (65% win chance)' },
+            { value: 'strong_b', label: 'Strong Side B (85% win chance)' }
+        ];
+    }
+
+    biasSelect.innerHTML = options.map(function(option) {
+        return '<option value="' + option.value + '">' + option.label + '</option>';
+    }).join('');
+
+    var valueToApply = options.some(function(option) { return option.value === previousValue; }) ? previousValue : 'even';
+    biasSelect.value = valueToApply;
+    biasSelect.dataset.lastValue = valueToApply;
+}
+
+function getStoredCompetitorEntries(match) {
+    var entries = [];
+    var participants = (match && match.participants) || [];
+
+    if (match && match.is_intergender) {
+        participants.forEach(function(team, index) {
+            var ids = [team.male, team.female].filter(Boolean);
+            if (!ids.length) return;
+            var explicitLabel = match.team_units && match.team_units[index] ? match.team_units[index].display_name : '';
+            entries.push({
+                type: 'team',
+                key: 'team_' + index,
+                value: ids[0],
+                wrestlerIds: ids,
+                label: getTeamDisplayLabel(ids, explicitLabel)
+            });
+        });
+        return entries;
+    }
+
+    participants.forEach(function(participant, index) {
+        if (Array.isArray(participant)) {
+            var explicitLabel = match.team_units && match.team_units[index] ? match.team_units[index].display_name : '';
+            entries.push({
+                type: 'team',
+                key: 'team_' + index,
+                value: participant[0],
+                wrestlerIds: participant.slice(),
+                label: getTeamDisplayLabel(participant, explicitLabel)
+            });
+        } else if (participant) {
+            entries.push({
+                type: 'wrestler',
+                key: participant,
+                value: participant,
+                wrestlerIds: [participant],
+                label: getWrestlerName(participant)
+            });
+        }
+    });
+
+    return entries;
+}
+
+function getBookingBiasDisplay(match) {
+    var bookingBias = (match && match.booking_bias) || 'even';
+    var competitors = getStoredCompetitorEntries(match);
+    if (!competitors.length) return bookingBias.replace(/_/g, ' ').toUpperCase();
+    if (bookingBias === 'even') return 'Even (50/50)';
+
+    var labelMap = {
+        strong_a: competitors[0] ? competitors[0].label + ' (85% win chance)' : 'Strong Side A (85% win chance)',
+        slight_a: competitors[0] ? competitors[0].label + ' (65% win chance)' : 'Slight Side A (65% win chance)',
+        slight_b: competitors[1] ? competitors[1].label + ' (65% win chance)' : 'Slight Side B (65% win chance)',
+        strong_b: competitors[1] ? competitors[1].label + ' (85% win chance)' : 'Strong Side B (85% win chance)'
+    };
+    if (labelMap[bookingBias]) return labelMap[bookingBias];
+
+    var multiTeamMatch = bookingBias.match(/^(strong|slight)_team_(\d+)$/);
+    if (multiTeamMatch) {
+        var teamIndex = parseInt(multiTeamMatch[2], 10);
+        if (competitors[teamIndex]) {
+            return competitors[teamIndex].label + ' (' + (multiTeamMatch[1] === 'strong' ? '85' : '65') + '% win chance)';
+        }
+    }
+
+    if (competitors.length > 2 && competitors[0] && (bookingBias === 'strong_a' || bookingBias === 'slight_a')) {
+        return competitors[0].label + ' (' + (bookingBias === 'strong_a' ? '85' : '65') + '% win chance)';
+    }
+
+    return bookingBias.replace(/_/g, ' ').toUpperCase();
+}
+
+function getBookedWinnerDisplay(match) {
+    if (!match || !match.booked_winner) return '';
+    var competitors = getStoredCompetitorEntries(match);
+    for (var i = 0; i < competitors.length; i++) {
+        if (competitors[i].wrestlerIds.indexOf(match.booked_winner) !== -1) {
+            return competitors[i].label;
+        }
+    }
+    return getWrestlerName(match.booked_winner);
+}
+
 function updateWinnerDropdown() {
     var winnerSelect = document.getElementById('bookedWinnerSelect');
     if (!winnerSelect) return;
@@ -1577,6 +2220,19 @@ function updateWinnerDropdown() {
     if (runnerUpSelect) runnerUpSelect.innerHTML = '<option value="">-- Runner-up / Last Eliminated (Optional) --</option>';
     if (ironManSelect) ironManSelect.innerHTML = '<option value="">-- Iron Man / Lasts Longest (Optional) --</option>';
     if (mostElimsSelect) mostElimsSelect.innerHTML = '<option value="">-- Most Eliminations (Optional) --</option>';
+
+    var competitorEntries = getCurrentCompetitorEntries();
+    rebuildBookingBiasOptions(competitorEntries);
+
+    if (competitorEntries.some(function(entry) { return entry.type === 'team'; })) {
+        competitorEntries.forEach(function(entry) {
+            var winnerOption = document.createElement('option');
+            winnerOption.value = entry.value;
+            winnerOption.textContent = entry.label;
+            winnerSelect.appendChild(winnerOption);
+        });
+        return;
+    }
 
     var selectedWrestlers = [];
     var selects = document.getElementById('wrestlerSelectionContainer').querySelectorAll('select');
@@ -1633,7 +2289,8 @@ function populateTitleDropdown(genderDivision) {
 
     var titles = Object.values(allTitles).filter(function(t) {
         var titleBrand = String(t.current_brand || t.assigned_brand || t.brand || '').trim().toLowerCase();
-        var isBrandMatch = !showBrand || !titleBrand || titleBrand === showBrand || titleBrand === 'cross-brand';
+        var isCrossBrandShow = showBrand === 'cross-brand';
+        var isBrandMatch = isCrossBrandShow || !showBrand || !titleBrand || titleBrand === showBrand || titleBrand === 'cross-brand';
 
         if (!isBrandMatch) return false;
 
@@ -1689,8 +2346,9 @@ function updateTitleInfo() {
     if (!title) return;
     
     var currentChampion = 'Vacant';
-    if (title.current_champion_id) {
-        var champ = allWrestlers[title.current_champion_id];
+    var championId = title.current_champion_id || title.current_holder_id || title.effective_champion_id;
+    if (championId) {
+        var champ = allWrestlers[championId];
         if (champ) {
             var genderIcon = champ.gender === 'male' ? '♂' : '♀';
             currentChampion = genderIcon + ' ' + champ.ring_name;
@@ -1700,6 +2358,10 @@ function updateTitleInfo() {
     var divisionIcon = title.division === 'male' ? '♂ Men\'s' : 
                        (title.division === 'female' ? '♀ Women\'s' : '⚥ Intergender');
     
+    if (currentChampion === 'Vacant' && title.current_champion_name) {
+        currentChampion = title.current_champion_name;
+    }
+
     infoDiv.innerHTML = 
         '<strong>' + title.name + '</strong><br>' +
         '<small>' +
@@ -1768,6 +2430,16 @@ function confirmAddMatch() {
         
         if (!participants || participants.length === 0) {
             showToast('Please select all participants', 'warning');
+            return;
+        }
+
+        var requiredCount = getRequiredParticipantCount(matchType);
+        var selectedIds = collectParticipantIds(participants);
+        if (requiredCount && selectedIds.length !== requiredCount) {
+            var label = matchType === 'elimination_chamber'
+                ? 'Elimination Chamber'
+                : selectedOption.textContent;
+            showToast(label + ' requires exactly ' + requiredCount + ' competitors', 'warning');
             return;
         }
         
@@ -2004,14 +2676,17 @@ function validateBattleRoyal() {
 
 function renderFullCard() {
     var container = document.getElementById('showCardList');
+    if (!container) return;
     
     if (!currentShowDraft || (!currentShowDraft.matches && !currentShowDraft.segments)) {
         container.innerHTML = '<div class="alert alert-info">No matches or segments yet. Click "Add Match" or "Add Segment" to start building your show.</div>';
         updateCardStats();
+        refreshEconomicsProjection();
         return;
     }
     
-    var viewMode = document.querySelector('input[name="cardView"]:checked').id;
+    var selectedView = document.querySelector('input[name="cardView"]:checked');
+    var viewMode = selectedView ? selectedView.id : 'viewCombined';
     
     var html = '';
     var itemNumber = 1;
@@ -2070,6 +2745,8 @@ function renderFullCard() {
     
     container.innerHTML = html;
     updateCardStats();
+    renderBookingTimeline();
+    refreshEconomicsProjection();
 }
 
 // ========================================================================
@@ -2136,7 +2813,7 @@ function renderMatchCard(match, matchIndex, itemNumber) {
             '<div class="row text-center">' +
             '<div class="col-md-4">' +
             '<small class="text-muted">Booking Bias:</small><br>' +
-            '<span class="badge bg-secondary">' + match.booking_bias.replace(/_/g, ' ').toUpperCase() + '</span>' +
+            '<span class="badge bg-secondary">' + getBookingBiasDisplay(match) + '</span>' +
             '</div>' +
             '<div class="col-md-4">' +
             '<small class="text-muted">Importance:</small><br>' +
@@ -2150,12 +2827,11 @@ function renderMatchCard(match, matchIndex, itemNumber) {
     
     // Booked winner
     if (match.booked_winner) {
-        var winner = allWrestlers[match.booked_winner];
-        if (winner) {
-            var winnerGenderIcon = winner.gender === 'male' ? '♂' : '♀';
+        var winnerLabel = getBookedWinnerDisplay(match);
+        if (winnerLabel) {
             html += '<div class="alert alert-success mt-2 mb-0 py-2">' +
                     '<i class="bi bi-trophy-fill"></i> <strong>Booked Winner:</strong> ' +
-                    winnerGenderIcon + ' ' + winner.ring_name +
+                    winnerLabel +
                     '</div>';
         }
     }
@@ -2292,6 +2968,7 @@ function estimateMatchRuntime(match) {
     var baseTime = 15; // Default
     
     if (match.match_type === 'rumble') return 60;
+    if (match.match_type === 'elimination_chamber') return 40;
     if (match.match_type === 'battle_royal') return 20;
     if (match.match_type === 'iron_man') return 30;
     if (match.special_stipulation === 'hell_in_a_cell') return 25;
@@ -2444,7 +3121,8 @@ function showAddSegmentModal(existingSegment) {
     
     // Show all active wrestlers (both genders)
     var allActiveWrestlers = Object.values(allWrestlers).filter(function(w) {
-        return w.status === 'active' && w.current_brand === currentShowDraft.brand;
+        var showBrand = currentShowDraft ? currentShowDraft.brand : '';
+        return w.status === 'active' && (showBrand === 'Cross-Brand' || w.current_brand === showBrand);
     }).sort(function(a, b) {
         return b.overall_rating - a.overall_rating;
     });
@@ -2560,6 +3238,11 @@ function confirmAddSegment() {
     
     if (selectedParticipants.length === 0) {
         showToast('Please select at least one participant', 'warning');
+        return;
+    }
+
+    if ((purpose === 'build_feud' || purpose === 'start_feud') && selectedParticipants.length < 2) {
+        showToast('Feud segments need at least two participants', 'warning');
         return;
     }
     
@@ -2696,6 +3379,17 @@ function renderSegmentCard(segment, segmentIndex, itemNumber) {
             '<span class="badge bg-success">' + segment.duration + ' min</span>' +
             '</div>' +
             '</div>' +
+            (segment.dialogue_beats && segment.dialogue_beats.length
+                ? '<div class="mt-3 border rounded p-2 bg-light">' +
+                  '<div class="small fw-bold mb-1"><i class="bi bi-chat-quote"></i> Dialogue Beats' +
+                  (segment.crowd_goal ? ' <span class="badge bg-dark ms-1">' + escapeHtml(segment.crowd_goal) + '</span>' : '') +
+                  '</div>' +
+                  segment.dialogue_beats.map(function(line) {
+                      return '<div class="small mb-1"><strong>' + escapeHtml(line.speaker_name || line.speaker_id || 'Speaker') + ':</strong> ' +
+                          escapeHtml(line.line || '') + '</div>';
+                  }).join('') +
+                  '</div>'
+                : '') +
             '</div></div>';
     
     return html;
@@ -2830,7 +3524,7 @@ function updateCardStats() {
     
     if (currentShowDraft.matches) {
         currentShowDraft.matches.forEach(function(match) {
-            totalRuntime += estimateMatchRuntime(match);
+            totalRuntime += parseInt(match.planned_duration_minutes || match.duration || estimateMatchRuntime(match), 10) || estimateMatchRuntime(match);
         });
     }
     
@@ -2840,21 +3534,23 @@ function updateCardStats() {
         });
     }
     
-    document.getElementById('matchCount').textContent = matchCount;
-    document.getElementById('segmentCount').textContent = segmentCount;
+    setTextIfPresent('matchCount', matchCount);
+    setTextIfPresent('segmentCount', segmentCount);
     
-    document.getElementById('matchBadge').textContent = matchCount + ' Matches';
-    document.getElementById('segmentBadge').textContent = segmentCount + ' Segments';
-    document.getElementById('runtimeBadge').textContent = totalRuntime + ' min';
+    setTextIfPresent('matchBadge', matchCount + ' Matches');
+    setTextIfPresent('segmentBadge', segmentCount + ' Segments');
+    setTextIfPresent('runtimeBadge', totalRuntime + ' min');
     
     // Enable/disable run show button
     var canRunShow = matchCount >= 3; // Minimum 3 matches
-    document.getElementById('runShowBtn').disabled = !canRunShow;
+    var runShowBtn = document.getElementById('runShowBtn');
+    if (!runShowBtn) return;
+    runShowBtn.disabled = !canRunShow;
     
     if (!canRunShow) {
-        document.getElementById('runShowBtn').title = 'Need at least 3 matches to run show';
+        runShowBtn.title = 'Need at least 3 matches to run show';
     } else {
-        document.getElementById('runShowBtn').title = 'Simulate this show';
+        runShowBtn.title = 'Simulate this show';
     }
 }
 
@@ -2863,12 +3559,14 @@ function updateCardStats() {
 // ========================================================================
 
 function renderShowInfo(show) {
-    document.getElementById('showName').textContent = show.name || 'Weekly TV';
-    document.getElementById('showBrand').textContent = show.brand || '-';
-    document.getElementById('showType').textContent = show.show_type || 'weekly_tv';
-    document.getElementById('showDate').textContent = show.date || 'TBD';
+    show = show || {};
+    setTextIfPresent('showName', show.show_name || show.name || 'Weekly TV');
+    setTextIfPresent('showBrand', show.brand || '-');
+    setTextIfPresent('showType', show.show_type || 'weekly_tv');
+    setTextIfPresent('showDate', show.date || 'TBD');
     
     var typeBadge = document.getElementById('showTypeBadge');
+    if (!typeBadge) return;
     typeBadge.textContent = (show.show_type || 'weekly_tv').replace(/_/g, ' ').toUpperCase();
     
     // Set badge color based on type
@@ -2882,21 +3580,205 @@ function renderShowInfo(show) {
     }
 }
 
+function getTimelineRuntimeTarget() {
+    if (productionPlan && productionPlan.total_runtime_minutes) {
+        return parseInt(productionPlan.total_runtime_minutes, 10) || 120;
+    }
+    if (currentShowDraft && currentShowDraft.show_type && currentShowDraft.show_type !== 'weekly_tv') {
+        return currentShowDraft.is_ppv ? 180 : 120;
+    }
+    return 120;
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderMatchLabel(match) {
+    var ids = [];
+    (match.participants || []).forEach(function(participant) {
+        if (Array.isArray(participant)) {
+            ids = ids.concat(participant);
+        } else if (participant && typeof participant === 'object') {
+            if (participant.male) ids.push(participant.male);
+            if (participant.female) ids.push(participant.female);
+        } else if (participant) {
+            ids.push(participant);
+        }
+    });
+    var names = ids.map(getWrestlerName).filter(Boolean);
+    if (names.length) return names.join(' vs ');
+    return (match.match_type || 'match').replace(/_/g, ' ').toUpperCase();
+}
+
+function getTimelineItems() {
+    var items = [];
+    (currentShowDraft.matches || []).forEach(function(match, index) {
+        items.push({
+            type: 'match',
+            index: index,
+            position: match.position || match.card_position || (index + 1),
+            label: renderMatchLabel(match),
+            segmentType: match.match_type || 'match',
+            duration: parseInt(match.planned_duration_minutes || match.duration || estimateMatchRuntime(match), 10) || 10
+        });
+    });
+    (currentShowDraft.segments || []).forEach(function(segment, index) {
+        items.push({
+            type: 'segment',
+            index: index,
+            position: segment.position || segment.card_position || ((index * 100) + 50),
+            label: segment.display_name || getSegmentTypeLabel(segment.segment_type),
+            segmentType: segment.segment_type || 'promo',
+            duration: parseInt(segment.duration || segment.duration_minutes || 5, 10) || 5
+        });
+    });
+    return items.sort(function(a, b) { return a.position - b.position; });
+}
+
+function getTimelineStatus(item, elapsed, target) {
+    var minimums = {
+        promo: 4,
+        promo_battle: 7,
+        interview: 3,
+        backstage: 3,
+        backstage_attack: 3,
+        in_ring_attack: 3,
+        contract_signing: 8,
+        vignette: 2,
+        singles: 8,
+        tag: 10,
+        triple_threat: 11,
+        fatal_4way: 12,
+        battle_royal: 14,
+        rumble: 45,
+        elimination_chamber: 28
+    };
+    if (elapsed + item.duration > target) return {className: 'bg-danger', label: 'Over allocated'};
+    if (item.duration < (minimums[item.segmentType] || 3)) return {className: 'bg-warning text-dark', label: 'Suspiciously short'};
+    return {className: 'bg-success', label: 'Within budget'};
+}
+
+function renderBookingTimeline() {
+    var list = document.getElementById('bookingTimelineList');
+    var progress = document.getElementById('timelineProgress');
+    var badge = document.getElementById('timelineAvailableBadge');
+    var warnings = document.getElementById('timelineWarnings');
+    if (!list || !progress || !badge || !warnings || !currentShowDraft) return;
+
+    var target = getTimelineRuntimeTarget();
+    var items = getTimelineItems();
+    var elapsed = 0;
+    var html = '';
+    var progressHtml = '';
+    var warningRows = [];
+
+    items.forEach(function(item, orderIndex) {
+        var status = getTimelineStatus(item, elapsed, target);
+        var width = Math.max(2, Math.min(100, (item.duration / target) * 100));
+        progressHtml += '<div class="progress-bar ' + status.className + '" style="width:' + width + '%" title="' +
+            escapeHtml(item.label) + ' - ' + item.duration + ' min"></div>';
+        if (status.label !== 'Within budget') {
+            warningRows.push('<div class="alert alert-' + (status.label === 'Over allocated' ? 'danger' : 'warning') + ' py-2 mb-2">' +
+                escapeHtml(item.label) + ': ' + status.label + '</div>');
+        }
+        html += '<div class="d-flex align-items-center gap-2 border rounded p-2">' +
+            '<span class="badge bg-dark">#' + (orderIndex + 1) + '</span>' +
+            '<span class="badge ' + status.className + '">' + status.label + '</span>' +
+            '<div class="flex-grow-1">' +
+            '<strong>' + escapeHtml(item.label) + '</strong>' +
+            '<div class="small text-muted">' + item.segmentType.replace(/_/g, ' ') + ' starts at minute ' + elapsed + '</div>' +
+            '</div>' +
+            '<input class="form-control form-control-sm" style="width: 92px" type="number" min="1" value="' + item.duration + '" ' +
+            'onchange="setTimelineDuration(\'' + item.type + '\',' + item.index + ', this.value)">' +
+            '</div>';
+        elapsed += item.duration;
+    });
+
+    if (!items.length) {
+        html = '<div class="text-muted small">No card items yet.</div>';
+    }
+
+    progress.innerHTML = progressHtml || '<div class="progress-bar bg-secondary" style="width:100%"></div>';
+    list.innerHTML = html;
+    var remaining = target - elapsed;
+    badge.textContent = remaining >= 0 ? (remaining + ' min available') : (Math.abs(remaining) + ' min over');
+    badge.className = 'badge ' + (remaining >= 0 ? 'bg-success' : 'bg-danger');
+    warnings.innerHTML = warningRows.join('');
+}
+
+function setTimelineDuration(itemType, index, value) {
+    var minutes = Math.max(1, parseInt(value, 10) || 1);
+    if (itemType === 'match' && currentShowDraft.matches && currentShowDraft.matches[index]) {
+        currentShowDraft.matches[index].planned_duration_minutes = minutes;
+        currentShowDraft.matches[index].duration = minutes;
+    }
+    if (itemType === 'segment' && currentShowDraft.segments && currentShowDraft.segments[index]) {
+        currentShowDraft.segments[index].duration = minutes;
+        currentShowDraft.segments[index].duration_minutes = minutes;
+    }
+    renderFullCard();
+}
+
+function saveBookingTimelinePlan() {
+    if (!currentShowDraft) {
+        showToast('No show draft loaded', 'warning');
+        return;
+    }
+    var target = getTimelineRuntimeTarget();
+    var used = getTimelineItems().reduce(function(total, item) { return total + item.duration; }, 0);
+    var acceptOverrun = used > target && confirm('This card is over the runtime. Save as an accepted overrun?');
+    fetch('/api/booking-enhancements/show-plan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            show_draft: serializeShowDraftForBackend(currentShowDraft),
+            production_plan: productionPlan,
+            accept_overrun: acceptOverrun
+        })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (!data.success) throw new Error(data.error || 'Failed to save timeline');
+        var plan = data.data || {};
+        showToast('Timeline saved with ' + ((plan.segments || []).length) + ' allocations', 'success');
+    })
+    .catch(function(error) {
+        showToast('Timeline save failed: ' + error.message, 'danger');
+    });
+}
+
 // ========================================================================
 // RUN SHOW (SIMULATE)
 // ========================================================================
 
-document.getElementById('runShowBtn').addEventListener('click', function() {
-    runShow();
-});
+var runShowButton = document.getElementById('runShowBtn');
+if (runShowButton) {
+    runShowButton.addEventListener('click', function() {
+        runShow();
+    });
+}
 
 function runShow() {
     if (!currentShowDraft.matches || currentShowDraft.matches.length < 3) {
         showToast('Need at least 3 matches to run the show', 'warning');
         return;
     }
-    
-    if (!confirm('Run this show and simulate all matches? This will generate results and update storylines.')) {
+
+    var confirmMessage = 'Run this show and simulate all matches? This will generate results and update storylines.';
+    if (currentEconomicsProjection && (currentEconomicsProjection.projected_net_profit || 0) < 0) {
+        confirmMessage =
+            'This show is projected to lose ' +
+            formatMoney(Math.abs(currentEconomicsProjection.projected_net_profit || 0)) +
+            '. Continue anyway?';
+    }
+
+    if (!confirm(confirmMessage)) {
         return;
     }
     
@@ -2909,12 +3791,17 @@ function runShow() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             show_draft: serializeShowDraftForBackend(currentShowDraft),
-            production_plan: productionPlan
+            production_plan: productionPlan,
+            live_interruption_mode: true
         })
     })
     .then(function(response) { return response.json(); })
     .then(function(data) {
         if (data.success) {
+            if (data.live_interruption && data.live_interruption.inserted) {
+                var intr = data.live_interruption.interruption || {};
+                showToast('Live interruption hit the show: ' + (intr.interruption_type || 'surprise'), 'warning');
+            }
             showToast('Show completed successfully!', 'success');
             
             // Save show result for recap page
@@ -3187,7 +4074,7 @@ function showToast(message, type) {
             if (!data.success) throw new Error(data.error || 'Failed to load opportunities');
             var rows = data.opportunities || [];
             if (!rows.length) {
-                container.innerHTML = '<div class="alert alert-secondary mb-0">No Rumble winners recorded yet. Run Rumble Royale first.</div>';
+                container.innerHTML = '<div class="alert alert-secondary mb-0">No LegacyMania opportunities recorded yet. Run Rumble Royale or Elimination Chamber first.</div>';
                 return;
             }
 
@@ -3195,17 +4082,25 @@ function showToast(message, type) {
                 var n = (t.name || '').toLowerCase();
                 return n.indexOf('world') !== -1 && (n.indexOf('women') !== -1 || n.indexOf('heavyweight') !== -1 || n.indexOf('championship') !== -1);
             });
+            function normalizeDivision(value) {
+                var division = String(value || '').toLowerCase();
+                if (division === 'womens' || division === "women's" || division === 'women') return 'female';
+                if (division === 'mens' || division === "men's" || division === 'men') return 'male';
+                return division;
+            }
 
-            var html = '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Winner</th><th>Division</th><th>Target Title</th><th>Legacy Night</th><th>Status</th><th></th></tr></thead><tbody>';
+            var html = '<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>Source</th><th>Winner</th><th>Division</th><th>Target Title</th><th>Legacy Night</th><th>Status</th><th></th></tr></thead><tbody>';
             rows.forEach(function(r){
+                var rowDivision = normalizeDivision(r.division || '');
                 var opts = worldTitles
-                  .filter(function(t){ return t.division === r.division; })
+                  .filter(function(t){ return normalizeDivision(t.division || '') === rowDivision; })
                   .map(function(t){ return '<option value="'+t.id+'" '+(r.target_title_id===t.id?'selected':'')+'>'+t.name+' ('+t.current_brand+')</option>'; }).join('');
                 html += '<tr>' +
-                    '<td><strong>'+ (r.rumble_winner_name || r.rumble_winner_id) +'</strong></td>' +
+                    '<td><span class="badge bg-dark">'+ (r.source_event || 'LegacyMania') +'</span></td>' +
+                    '<td><strong>'+ (r.winner_name || r.rumble_winner_name || r.winner_id || r.rumble_winner_id) +'</strong></td>' +
                     '<td>'+ r.division +'</td>' +
                     '<td><select class="form-select form-select-sm" id="legacy_title_'+r.id+'"><option value="">Choose...</option>'+opts+'</select></td>' +
-                    '<td><select class="form-select form-select-sm" id="legacy_night_'+r.id+'"><option>Night 1</option><option>Night 2</option></select></td>' +
+                    '<td><select class="form-select form-select-sm" id="legacy_night_'+r.id+'"><option '+((r.legacy_night||'Night 1')==='Night 1'?'selected':'')+'>Night 1</option><option '+((r.legacy_night||'Night 1')==='Night 2'?'selected':'')+'>Night 2</option></select></td>' +
                     '<td><span class="badge bg-info">'+(r.status||'pending')+'</span></td>' +
                     '<td><button class="btn btn-sm btn-primary" onclick="assignLegacyOpportunity(&quot;'+r.id+'&quot;)">Assign</button></td>' +
                     '</tr>';
@@ -3236,9 +4131,16 @@ window.openAddMatch = openAddMatch;
 window.confirmAddMatch = confirmAddMatch;
 window.confirmAddSegment = confirmAddSegment;
 window.updateSegmentTypePreview = updateSegmentTypePreview;
+window.loadLegacyManiaPanel = loadLegacyManiaPanel;
+window.assignLegacyOpportunity = assignLegacyOpportunity;
+window.loadShowrunnerDraftIntoBooking = loadShowrunnerDraftIntoBooking;
+window.generatePromoDialogueBeats = generatePromoDialogueBeats;
+window.forceLiveInterruptionPreview = forceLiveInterruptionPreview;
 window.regenerateCard = regenerateCard;
 window.clearAllItems = clearAllItems;
 window.renderFullCard = renderFullCard;
+window.saveBookingTimelinePlan = saveBookingTimelinePlan;
+window.setTimelineDuration = setTimelineDuration;
 window.updateMatchTypeUI = updateMatchTypeUI;
 window.toggleTitleOptions = toggleTitleOptions;
 window.updateTitleInfo = updateTitleInfo;

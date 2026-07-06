@@ -54,6 +54,58 @@ def register_championship_routes(app, db, universe_state):
     print("   ✅ Championship management routes registered")
     print("   ✅ Championship prestige routes registered")
 
+def _resolve_tag_team_display(holder_id):
+    """Return best-effort tag team display data for a current title holder."""
+    if not holder_id or not getattr(universe, 'tag_team_manager', None):
+        return None
+
+    holder_id = str(holder_id)
+    team = None
+
+    if holder_id.startswith('team_'):
+        team = universe.tag_team_manager.get_team_by_id(holder_id)
+    else:
+        teams = universe.tag_team_manager.get_teams_involving_wrestler(holder_id)
+        active_teams = [
+            candidate for candidate in teams
+            if getattr(candidate, 'is_active', True) and not getattr(candidate, 'is_disbanded', False)
+        ]
+        team = active_teams[0] if active_teams else (teams[0] if teams else None)
+
+    if not team and database:
+        try:
+            import json
+
+            rows = database.conn.cursor().execute(
+                """
+                SELECT team_id, team_name, member_ids, member_names
+                FROM tag_teams
+                WHERE is_active = 1 AND is_disbanded = 0
+                ORDER BY team_name
+                """
+            ).fetchall()
+            for row in rows:
+                member_ids = json.loads(row['member_ids'] or '[]')
+                if holder_id == row['team_id'] or holder_id in member_ids:
+                    return {
+                        'team_id': row['team_id'],
+                        'team_name': row['team_name'],
+                        'member_ids': member_ids[:2],
+                        'member_names': json.loads(row['member_names'] or '[]')[:2],
+                    }
+        except Exception:
+            return None
+
+    if not team:
+        return None
+
+    return {
+        'team_id': getattr(team, 'team_id', holder_id),
+        'team_name': getattr(team, 'team_name', None),
+        'member_ids': (getattr(team, 'member_ids', None) or [])[:2],
+        'member_names': (getattr(team, 'member_names', None) or [])[:2],
+    }
+
 
 def _load_manager_state():
     """Load championship manager state from database"""
@@ -113,24 +165,35 @@ def api_get_all_championships():
                 )
                 if is_tag and not champ_dict.get('is_vacant'):
                     holder_id = champ_dict.get('current_holder_id')
-                    team = None
-                    if holder_id and str(holder_id).startswith('team_'):
-                        team = universe.tag_team_manager.get_team_by_id(holder_id)
-                    elif holder_id:
-                        teams = universe.tag_team_manager.get_teams_involving_wrestler(holder_id)
-                        team = teams[0] if teams else None
+                    team = _resolve_tag_team_display(holder_id)
                     if team:
-                        members = (team.member_names or [])[:2]
-                        champ_dict['current_holder_id'] = team.team_id
-                        champ_dict['current_holder_name'] = team.team_name
-                        champ_dict['current_holder_display'] = f"{team.team_name} ({' & '.join(members)})" if members else team.team_name
-                        champ_dict['current_holder_member_ids'] = (team.member_ids or [])[:2]
+                        members = team.get('member_names', [])
+                        holder_display = ' & '.join(members) if members else (team.get('team_name') or champ_dict.get('current_holder_name'))
+                        champ_dict['current_holder_id'] = team.get('team_id', holder_id)
+                        champ_dict['current_holder_name'] = holder_display
+                        champ_dict['current_holder_display'] = holder_display
+                        champ_dict['current_holder_team_name'] = team.get('team_name')
+                        champ_dict['current_holder_member_ids'] = team.get('member_ids', [])
                         champ_dict['current_holder_member_names'] = members
                     else:
                         champ_dict['current_holder_display'] = champ_dict.get('current_holder_name')
             except Exception:
                 pass
 
+            division = str(extended.get('division') or '').lower()
+            if division in ('mens', "men's"):
+                champ_dict['division'] = 'male'
+            elif division in ('womens', "women's"):
+                champ_dict['division'] = 'female'
+            elif division:
+                champ_dict['division'] = division
+            elif 'women' in str(champ.title_type).lower() or 'women' in str(champ.name).lower():
+                champ_dict['division'] = 'female'
+            elif 'mixed' in str(champ.title_type).lower() or 'intergender' in str(champ.title_type).lower():
+                champ_dict['division'] = 'intergender'
+            else:
+                champ_dict['division'] = 'male'
+            champ_dict['current_brand'] = champ.assigned_brand
             champ_dict['retired'] = extended.get('retired', False)
             champ_dict['is_retired'] = extended.get('retired', False)
             champ_dict['is_custom'] = extended.get('is_custom', False)
@@ -1810,13 +1873,6 @@ def api_retire_championship(title_id):
         if extended.get('retired'):
             return jsonify({'success': False, 'error': 'Championship is already retired'}), 400
         
-        # Must be vacant to retire
-        if not championship.is_vacant:
-            return jsonify({
-                'success': False,
-                'error': 'Championship must be vacant before retiring. Please vacate the title first.'
-            }), 400
-        
         data = request.get_json() if request.is_json else {}
         reason = data.get('reason', 'Championship retired')
         
@@ -1926,39 +1982,11 @@ def api_delete_championship(title_id):
         if not championship:
             return jsonify({'success': False, 'error': 'Championship not found'}), 404
         
-        # Safety checks
-        from persistence.championship_custom_db import get_championship_extended
-        extended = get_championship_extended(database, title_id)
-        
-        # Must be custom championship
-        if not extended or not extended.get('is_custom'):
-            return jsonify({
-                'success': False,
-                'error': 'Only custom championships can be deleted. Use retire instead for built-in titles.'
-            }), 400
-        
-        # Must be vacant
-        if not championship.is_vacant:
-            return jsonify({
-                'success': False,
-                'error': 'Championship must be vacant before deletion. Please vacate the title first.'
-            }), 400
-        
-        # Must be retired
-        if not extended.get('retired'):
-            return jsonify({
-                'success': False,
-                'error': 'Championship must be retired before deletion. Please retire it first.'
-            }), 400
-        
         title_name = championship.name
         
         # Perform deletion
         from persistence.championship_custom_db import delete_championship
         delete_championship(database, title_id)
-        
-        # Remove from universe state
-        universe.championships = [c for c in universe.championships if c.id != title_id]
         
         database.conn.commit()
         

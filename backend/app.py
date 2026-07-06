@@ -108,9 +108,20 @@ app.config['RIVAL_PROMOTION_MANAGER'] = rival_mgr
 app.config['RIVAL_MANAGER'] = rival_mgr  # Alias for compatibility
 app.config['BIDDING_WAR_ENGINE'] = BiddingWarEngine(database, rival_mgr)
 competing_ai = CompetingPromotionAI(database, rival_mgr)
-competing_ai.initialize_metadata()
+try:
+    competing_ai.initialize_metadata()
+except Exception as exc:
+    try:
+        database.conn.rollback()
+    except Exception:
+        pass
+    print(f"⚠️ Competing promotion metadata init skipped during startup: {exc}")
 app.config['COMPETING_PROMOTION_AI'] = competing_ai
 app.config['DATABASE'] = database  # Make database available to blueprints
+from services.booking_story_media_service import BookingStoryMediaService
+app.config['BOOKING_STORY_MEDIA_SERVICE'] = BookingStoryMediaService(database)
+from services.simulation_expansion_service import SimulationExpansionService
+app.config['SIMULATION_EXPANSION_SERVICE'] = SimulationExpansionService(database)
 
 
 # Injury Manager
@@ -301,6 +312,11 @@ def finance_view():
     return render_template('finance.html')
 
 
+@app.route('/media-business')
+def media_business_view():
+    return render_template('media_business.html')
+
+
 @app.route('/caw')
 def caw_view():
     return render_template('caw.html')
@@ -407,6 +423,10 @@ def calendar_view():
 def evolve_view():
     return render_template('evolve.html')
 
+@app.route('/character-system')
+def character_system_view():
+    return render_template('character_system.html')
+
 @app.route('/world-feed')
 def world_feed_view():
     return render_template('world_feed.html')
@@ -419,6 +439,11 @@ def rivals_intelligence_view():
 def legacy_expansion_view():
     """Dashboard for feature sets added in Steps 126-212."""
     return render_template('legacy_expansion.html')
+
+@app.route('/simulation-expansion')
+def simulation_expansion_view():
+    """Enterprise simulation dashboard for features 149-182 and 243-250."""
+    return render_template('simulation_expansion.html')
 
 
 
@@ -519,6 +544,8 @@ def legacy_overview_api():
 def not_found(e):
     if request.path.startswith('/api/'):
         return jsonify({'error': 'Endpoint not found'}), 404
+    if request.path == '/contract-market':
+        return 'Contract Market page has been removed. Use /contracts.', 404
     return render_template('index.html')
 
 

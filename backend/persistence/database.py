@@ -8,6 +8,13 @@ import json
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
+import sys
+
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
 
 
 class Database:
@@ -34,8 +41,20 @@ class Database:
     def connect(self):
         """Establish database connection with row_factory"""
         if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=30.0
+            )
             self.conn.row_factory = sqlite3.Row  # This allows dict(row) to work
+            try:
+                self.conn.execute('PRAGMA journal_mode=WAL')
+            except sqlite3.OperationalError:
+                pass
+            try:
+                self.conn.execute('PRAGMA busy_timeout = 30000')
+            except sqlite3.OperationalError:
+                pass
         return self.conn
     
     def close(self):
@@ -52,7 +71,7 @@ class Database:
             """Attempt to add a column for backward compatibility with older DB files."""
             try:
                 cursor.execute(f'ALTER TABLE championships ADD COLUMN {column_name} {ddl_suffix}')
-                print(f"✅ Added {column_name} column")
+                print(f"[OK] Added {column_name} column")
             except sqlite3.OperationalError:
                 # Column already exists or cannot be added on this schema version.
                 pass
@@ -327,6 +346,8 @@ class Database:
         # STEP 126: Rival Promotion Tables
         self._create_rival_promotion_tables()
         self._create_show_drafts_table()  # STEP 58-72: Booking system
+        from persistence.phase_expansion_db import create_phase_expansion_tables
+        create_phase_expansion_tables(self)
 
         # STEP 116-117: Upgrade free agent tables with new fields
         from persistence.free_agent_db import upgrade_free_agent_tables_step_116_117
@@ -339,8 +360,8 @@ class Database:
         # STEP 125: Contract Storyline Tables
         # ========================================================================
         
-        # Turn System Tables (Alignment/Turn Tracking)
-        self._create_turn_tables()
+        self._create_character_system_tables()
+        self._create_vanguard_development_tables()
         # ========================================================================
         # STEP 125: Contract Storyline Tables
         # ========================================================================
@@ -374,36 +395,36 @@ class Database:
         # Update contract_promises table with missing columns if they don't exist
         try:
             cursor.execute('ALTER TABLE contract_promises ADD COLUMN broken INTEGER DEFAULT 0')
-            print("✅ Added 'broken' column to contract_promises")
+            print("[OK] Added 'broken' column to contract_promises")
         except:
             pass  # Column already exists
 
         try:
             cursor.execute('ALTER TABLE contract_promises ADD COLUMN broken_reason TEXT')
-            print("✅ Added 'broken_reason' column to contract_promises")
+            print("[OK] Added 'broken_reason' column to contract_promises")
         except:
             pass  # Column already exists
 
         try:
             cursor.execute('ALTER TABLE contract_promises ADD COLUMN morale_penalty_applied INTEGER DEFAULT 0')
-            print("✅ Added 'morale_penalty_applied' column to contract_promises")
+            print("[OK] Added 'morale_penalty_applied' column to contract_promises")
         except:
             pass  # Column already exists
 
         try:
             cursor.execute('ALTER TABLE contract_promises ADD COLUMN wrestler_name TEXT')
-            print("✅ Added 'wrestler_name' column to contract_promises")
+            print("[OK] Added 'wrestler_name' column to contract_promises")
         except:
             pass  # Column already exists
 
         try:
             cursor.execute('ALTER TABLE contract_promises ADD COLUMN fulfillment_details TEXT')
-            print("✅ Added 'fulfillment_details' column to contract_promises")
+            print("[OK] Added 'fulfillment_details' column to contract_promises")
         except:
             pass  # Column already exists
 
         self.conn.commit()
-        print("✅ Contract storyline tables created/updated (STEP 125)")
+        print("[OK] Contract storyline tables created/updated (STEP 125)")
 
         # ========================================================================
         # STEPS 224-236: Morale Records Table
@@ -457,7 +478,7 @@ class Database:
         )
 
         self.conn.commit()
-        print("✅ Morale records table created (Steps 224-236)")
+        print("[OK] Morale records table created (Steps 224-236)")
 
         # STEPS 245-253: Morale Behavior Tables
         self._create_morale_behavior_tables()
@@ -473,24 +494,56 @@ class Database:
             from persistence.show_production_db import create_show_production_tables
             create_show_production_tables(self)
         except Exception as _spe:
-            print(f"⚠️ Could not create show production tables: {_spe}")
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Could not create show production tables: {_spe}")
 
         # STEPS 138-148: Venues / Cities (foundation)
         try:
             from persistence.venue_db import create_venue_tables
             create_venue_tables(self)
         except Exception as _vpe:
-            print(f"⚠️ Could not create venue tables: {_vpe}")
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Could not create venue tables: {_vpe}")
 
         # STEPS 126-212: TV/media + marketing + staff + industry + ROC Evolve + legacy
         try:
             from persistence.legacy_expansion_db import create_legacy_expansion_tables
             create_legacy_expansion_tables(self)
         except Exception as _lee:
-            print(f"⚠️ Could not create legacy expansion tables: {_lee}")
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Could not create legacy expansion tables: {_lee}")
+
+        # FEATURES 149-160, 171-182, 243-250: enterprise simulation expansion
+        try:
+            from persistence.simulation_expansion_db import create_simulation_expansion_tables
+            create_simulation_expansion_tables(self)
+        except Exception as _see:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Could not create simulation expansion tables: {_see}")
+        try:
+            from persistence.contract_market_db import create_contract_market_tables
+            create_contract_market_tables(self)
+        except Exception as _cme:
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            print(f"[WARN] Could not create contract market tables: {_cme}")
 
         self.conn.commit()
-        print("✅ SQLite database initialized")
+        print("[OK] SQLite database initialized")
     
     # ========================================================================
     # Game State Operations
@@ -586,6 +639,19 @@ class Database:
         """Save or update a wrestler (NO COMMIT - batched)"""
         cursor = self.conn.cursor()
         now = datetime.now().isoformat()
+        character_columns = [
+            'alignment_percentage', 'gimmick_effectiveness',
+            'primary_wrestling_style', 'secondary_wrestling_style',
+            'nationality', 'birth_city', 'birth_country',
+            'kayfabe_hometown', 'ethnic_background',
+        ]
+        try:
+            existing_character = cursor.execute(
+                f"SELECT {', '.join(character_columns)} FROM wrestlers WHERE id = ?",
+                (wrestler.id,)
+            ).fetchone()
+        except sqlite3.OperationalError:
+            existing_character = None
         
         cursor.execute('''
             INSERT OR REPLACE INTO wrestlers (
@@ -635,6 +701,13 @@ class Database:
             getattr(wrestler.contract, 'total_matches_this_contract', 0),
             1 if wrestler.is_retired else 0, now, now
         ))
+
+        if existing_character:
+            assignments = ', '.join([f'{column} = ?' for column in character_columns])
+            cursor.execute(
+                f'UPDATE wrestlers SET {assignments} WHERE id = ?',
+                [existing_character[column] for column in character_columns] + [wrestler.id]
+            )
         
         # STEP 122: Save contract incentives
         if hasattr(wrestler.contract, 'incentives'):
@@ -1144,7 +1217,7 @@ class Database:
             match_result.duration_minutes,
             match_result.star_rating,
             1 if match_result.is_title_match else 0,
-            match_result.side_a.wrestler_ids[0] if match_result.is_title_match else None,
+            match_result.title_id if match_result.is_title_match else None,
             1 if match_result.title_changed_hands else 0,
             1 if match_result.is_upset else 0,
             None,
@@ -1359,7 +1432,7 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_milestones_type ON milestones(milestone_type)')
         
         self.conn.commit()
-        print("✅ Stats tracking tables created")
+        print("[OK] Stats tracking tables created")
     
     def get_wrestler_stats(self, wrestler_id: str) -> Optional[Dict[str, Any]]:
         """Get cached stats for a wrestler"""
@@ -1818,7 +1891,7 @@ class Database:
                 pass
         
         self.conn.commit()
-        print("✅ Tag teams table created")
+        print("[OK] Tag teams table created")
     
     def save_tag_team(self, tag_team) -> None:
         """Save or update a tag team (NO COMMIT - batched)"""
@@ -2321,7 +2394,7 @@ class Database:
             cursor.execute('ALTER TABLE championships ADD COLUMN last_defense_week INTEGER')
             cursor.execute('ALTER TABLE championships ADD COLUMN last_defense_show_id TEXT')
             cursor.execute('ALTER TABLE championships ADD COLUMN total_defenses INTEGER DEFAULT 0')
-            print("✅ Added defense frequency and tracking columns to championships table")
+            print("[OK] Added defense frequency and tracking columns to championships table")
         except:
             pass  # Columns already exist
     
@@ -2433,13 +2506,13 @@ class Database:
             cursor.execute('ALTER TABLE wrestlers ADD COLUMN title_reigns_this_contract INTEGER DEFAULT 0')
             cursor.execute('ALTER TABLE wrestlers ADD COLUMN average_match_rating REAL DEFAULT 0.0')
             cursor.execute('ALTER TABLE wrestlers ADD COLUMN total_matches_this_contract INTEGER DEFAULT 0')
-            print("✅ Added STEP 122 contract incentive columns to wrestlers table")
+            print("[OK] Added STEP 122 contract incentive columns to wrestlers table")
         except:
             pass  # Columns already exist
         
         self.conn.commit()
-        print("✅ Contract incentives table created (STEP 122)")
-        print("✅ Contract history table created (Enhancement A)")
+        print("[OK] Contract incentives table created (STEP 122)")
+        print("[OK] Contract history table created (Enhancement A)")
     
     # ========================================================================
     # STEP 122: Contract Incentive Operations
@@ -2494,7 +2567,7 @@ class Database:
 
             rows = [dict(row) for row in cursor.fetchall()]
         except Exception as e:
-            print(f"⚠️ Database error loading incentives for {wrestler_id}: {e}")
+            print(f"[WARN] Database error loading incentives for {wrestler_id}: {e}")
             return []
         finally:
             if read_conn is not None:
@@ -2511,13 +2584,13 @@ class Database:
                 triggered_count = row.get('triggered_count') if row.get('triggered_count') is not None else 0
 
                 if not incentive_type_str:
-                    print(f"⚠️ Skipping incentive with NULL type for {wrestler_id}")
+                    print(f"[WARN] Skipping incentive with NULL type for {wrestler_id}")
                     continue
 
                 try:
                     incentive_type = IncentiveType(incentive_type_str)
                 except ValueError:
-                    print(f"⚠️ Skipping invalid incentive type '{incentive_type_str}' for {wrestler_id}")
+                    print(f"[WARN] Skipping invalid incentive type '{incentive_type_str}' for {wrestler_id}")
                     continue
 
                 try:
@@ -2546,7 +2619,7 @@ class Database:
                 incentives.append(incentive)
 
             except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
-                print(f"⚠️ Skipping invalid incentive for {wrestler_id}: {e}")
+                print(f"[WARN] Skipping invalid incentive for {wrestler_id}: {e}")
                 continue
 
         return incentives
@@ -2777,7 +2850,7 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_contract_promises_fulfilled ON contract_promises(fulfilled)')
         
         self.conn.commit()
-        print("✅ Contract promises table created")
+        print("[OK] Contract promises table created")
 
     def save_contract_promise(self, promise_data: Dict[str, Any]) -> int:
         """Save a contract promise"""
@@ -2947,7 +3020,7 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_fa_declarations_status ON free_agency_declarations(status)')
 
         self.conn.commit()
-        print("✅ Free agency declaration tables created (STEP 123)")
+        print("[OK] Free agency declaration tables created (STEP 123)")
 
     def save_free_agency_declaration(self, declaration) -> None:
         """Save free agency declaration to database"""
@@ -2993,7 +3066,7 @@ class Database:
         try:
             cursor.execute('SELECT * FROM free_agency_declarations ORDER BY declared_year DESC, declared_week DESC')
         except Exception as e:
-            print(f"⚠️ Error loading declarations: {e}")
+            print(f"[WARN] Error loading declarations: {e}")
             print("Creating table...")
             self._create_free_agency_declaration_tables()
             cursor.execute('SELECT * FROM free_agency_declarations ORDER BY declared_year DESC, declared_week DESC')
@@ -3017,7 +3090,7 @@ class Database:
                 ORDER BY declared_year DESC, declared_week DESC
             ''')
         except Exception as e:
-            print(f"⚠️ Error loading active declarations: {e}")
+            print(f"[WARN] Error loading active declarations: {e}")
             print("Creating table...")
             self._create_free_agency_declaration_tables()
             cursor.execute('''
@@ -3162,7 +3235,7 @@ class Database:
     def vacuum(self):
         """Optimize database"""
         self.conn.execute('VACUUM')
-        print("✅ Database optimized")
+        print("[OK] Database optimized")
     
     def get_table_counts(self) -> Dict[str, int]:
         """Get row counts for all tables (useful for debugging)"""
@@ -3226,7 +3299,7 @@ class Database:
         ''', (now, now))
         
         self.conn.commit()
-        print("⚠️ Database has been reset")
+        print("[WARN] Database has been reset")
     
 
     # ========================================================================
@@ -3533,7 +3606,7 @@ class Database:
             );
         ''')
         self.conn.commit()
-        print("✅ Show drafts table created")
+        print("[OK] Show drafts table created")
 
 
     def _create_morale_events_tables(self):
@@ -3768,7 +3841,7 @@ class Database:
         # Reconnect
         self.connect()
         
-        print(f"✅ Database backed up to {backup_path}")
+        print(f"[OK] Database backed up to {backup_path}")
     
     def execute_raw(self, sql: str, params: tuple = None) -> List[Dict[str, Any]]:
         """Execute raw SQL (use with caution)"""
@@ -3857,190 +3930,398 @@ class Database:
         return cursor.rowcount > 0
 
     # ========================================================================
-    # Turn System Operations (Alignment/Turn Tracking)
+    # Vanguard Developmental Brand + GM Promotion Foundation
     # ========================================================================
 
-    def _create_turn_tables(self):
-        """Create tables for the alignment/turn system"""
+    def _drop_alignment_turn_tables(self) -> None:
+        """Remove deprecated wrestler turn/alignment tracking tables."""
         cursor = self.conn.cursor()
+        cursor.execute('DROP TABLE IF EXISTS turn_segments')
+        cursor.execute('DROP TABLE IF EXISTS wrestler_turns')
+        self.conn.commit()
 
-        # Wrestler Turns Table
+    def _create_character_system_tables(self) -> None:
+        """Create persistent wrestler character system tables and columns."""
+        cursor = self.conn.cursor()
+        wrestler_columns = [
+            ("alignment_percentage", "INTEGER DEFAULT 50"),
+            ("gimmick_effectiveness", "INTEGER DEFAULT 50"),
+            ("primary_wrestling_style", "TEXT DEFAULT 'hybrid'"),
+            ("secondary_wrestling_style", "TEXT"),
+            ("nationality", "TEXT DEFAULT 'United States'"),
+            ("birth_city", "TEXT"),
+            ("birth_country", "TEXT"),
+            ("kayfabe_hometown", "TEXT"),
+            ("ethnic_background", "TEXT"),
+        ]
+        for column_name, ddl in wrestler_columns:
+            try:
+                cursor.execute(f"ALTER TABLE wrestlers ADD COLUMN {column_name} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS wrestler_turns (
+            CREATE TABLE IF NOT EXISTS alignment_turns (
                 id TEXT PRIMARY KEY,
                 wrestler_id TEXT NOT NULL,
-                wrestler_name TEXT NOT NULL,
-                turn_type TEXT NOT NULL,
-                old_alignment TEXT NOT NULL,
-                new_alignment TEXT NOT NULL,
-                start_year INTEGER NOT NULL,
-                start_week INTEGER NOT NULL,
-                start_show_id TEXT,
-                feud_id TEXT,
-                storyline_id TEXT,
-                target_wrestler_ids TEXT,  -- JSON array
-                target_wrestler_names TEXT,  -- JSON array
-                phase TEXT NOT NULL,
-                turn_progress INTEGER NOT NULL DEFAULT 0,
-                execution_year INTEGER,
-                execution_week INTEGER,
-                execution_show_id TEXT,
-                resolved_year INTEGER,
-                resolved_week INTEGER,
-                popularity_change INTEGER DEFAULT 0,
-                final_crowd_reaction TEXT,
-                is_completed INTEGER NOT NULL DEFAULT 0,
-                is_successful INTEGER NOT NULL DEFAULT 1,
+                old_alignment INTEGER NOT NULL,
+                new_alignment INTEGER NOT NULL,
+                turn_date TEXT NOT NULL,
+                timing_score INTEGER NOT NULL,
+                build_score INTEGER NOT NULL,
+                surprise_factor INTEGER NOT NULL,
+                impact_score INTEGER NOT NULL,
+                overness_change INTEGER NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS gimmick_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                default_alignment TEXT NOT NULL,
+                recommended_wrestling_style TEXT,
+                base_popularity_modifier INTEGER DEFAULT 0,
+                attributes_json TEXT NOT NULL,
+                is_custom INTEGER DEFAULT 0,
+                version INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wrestler_gimmicks (
+                wrestler_id TEXT PRIMARY KEY,
+                template_id TEXT NOT NULL,
+                custom_name TEXT,
+                effectiveness INTEGER NOT NULL,
+                assigned_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id),
+                FOREIGN KEY (template_id) REFERENCES gimmick_templates(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS entrance_configurations (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                settings_json TEXT NOT NULL,
+                weekly_cost INTEGER NOT NULL,
+                presentation_boost INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS catchphrases (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                phrase_text TEXT NOT NULL,
+                popularity_score INTEGER DEFAULT 50,
+                usage_count INTEGER DEFAULT 0,
+                created_date TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS finisher_moves (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                move_name TEXT NOT NULL,
+                move_type TEXT NOT NULL,
+                protection_rating INTEGER DEFAULT 100,
+                kickout_count INTEGER DEFAULT 0,
+                successful_pin_count INTEGER DEFAULT 0,
+                debut_date TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS signature_moves (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                move_name TEXT NOT NULL,
+                sequence_position INTEGER NOT NULL,
+                crowd_anticipation_level INTEGER DEFAULT 50,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS character_evolution_events (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                previous_state TEXT,
+                new_state TEXT NOT NULL,
+                trigger_reason TEXT,
+                readiness_score INTEGER DEFAULT 50,
+                event_date TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS entrance_companions (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                companion_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT,
+                interference_tendency INTEGER DEFAULT 20,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id),
-                FOREIGN KEY (feud_id) REFERENCES feuds(id)
+                FOREIGN KEY (companion_id) REFERENCES wrestlers(id)
             );
         ''')
-
-        # Turn Segments Table
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS turn_segments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                turn_id TEXT NOT NULL,
-                segment_id TEXT NOT NULL,
-                show_id TEXT NOT NULL,
-                show_name TEXT NOT NULL,
-                year INTEGER NOT NULL,
-                week INTEGER NOT NULL,
-                segment_type TEXT NOT NULL,
-                description TEXT NOT NULL,
-                crowd_reaction TEXT NOT NULL,
-                crowd_heat_level INTEGER NOT NULL,
-                turn_progress INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (turn_id) REFERENCES wrestler_turns(id)
+            CREATE TABLE IF NOT EXISTS rating_history (
+                id TEXT PRIMARY KEY,
+                wrestler_id TEXT NOT NULL,
+                attribute_name TEXT NOT NULL,
+                old_value INTEGER NOT NULL,
+                new_value INTEGER NOT NULL,
+                change_reason TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
             );
         ''')
 
-        # Create indexes
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_turns_wrestler ON wrestler_turns(wrestler_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_turns_phase ON wrestler_turns(phase)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_turns_completed ON wrestler_turns(is_completed)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_turn_segments_turn ON turn_segments(turn_id)')
+        for ddl in [
+            "CREATE INDEX IF NOT EXISTS idx_alignment_turns_wrestler_date ON alignment_turns(wrestler_id, turn_date)",
+            "CREATE INDEX IF NOT EXISTS idx_catchphrases_wrestler ON catchphrases(wrestler_id)",
+            "CREATE INDEX IF NOT EXISTS idx_finisher_moves_wrestler ON finisher_moves(wrestler_id)",
+            "CREATE INDEX IF NOT EXISTS idx_signature_moves_wrestler_order ON signature_moves(wrestler_id, sequence_position)",
+            "CREATE INDEX IF NOT EXISTS idx_rating_history_wrestler_date ON rating_history(wrestler_id, recorded_at)",
+            "CREATE INDEX IF NOT EXISTS idx_wrestlers_character_filters ON wrestlers(primary_brand, primary_wrestling_style, alignment_percentage)",
+        ]:
+            cursor.execute(ddl)
 
-        self.conn.commit()
-        print("✅ Created turn system tables")
-
-    def save_turn_state(self, turn_data: Dict[str, Any]):
-        """Save turn manager state"""
-        cursor = self.conn.cursor()
-        now = datetime.now().isoformat()
-
-        # Clear existing turns
-        cursor.execute('DELETE FROM turn_segments')
-        cursor.execute('DELETE FROM wrestler_turns')
-
-        # Save all turns
-        for turn in turn_data.get('turns', []):
+        from services.character_system_service import default_gimmick_templates, now_iso
+        for template in default_gimmick_templates():
+            now = now_iso()
             cursor.execute('''
-                INSERT INTO wrestler_turns (
-                    id, wrestler_id, wrestler_name, turn_type,
-                    old_alignment, new_alignment,
-                    start_year, start_week, start_show_id,
-                    feud_id, storyline_id,
-                    target_wrestler_ids, target_wrestler_names,
-                    phase, turn_progress,
-                    execution_year, execution_week, execution_show_id,
-                    resolved_year, resolved_week,
-                    popularity_change, final_crowd_reaction,
-                    is_completed, is_successful,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO gimmick_templates (
+                    id, name, description, default_alignment,
+                    recommended_wrestling_style, base_popularity_modifier,
+                    attributes_json, is_custom, version, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?)
             ''', (
-                turn['id'],
-                turn['wrestler_id'],
-                turn['wrestler_name'],
-                turn['turn_type'],
-                turn['old_alignment'],
-                turn['new_alignment'],
-                turn['start_year'],
-                turn['start_week'],
-                turn.get('start_show_id'),
-                turn.get('feud_id'),
-                turn.get('storyline_id'),
-                json.dumps(turn.get('target_wrestler_ids', [])),
-                json.dumps(turn.get('target_wrestler_names', [])),
-                turn['phase'],
-                turn.get('turn_progress', 0),
-                turn.get('execution_year'),
-                turn.get('execution_week'),
-                turn.get('execution_show_id'),
-                turn.get('resolved_year'),
-                turn.get('resolved_week'),
-                turn.get('popularity_change', 0),
-                turn.get('final_crowd_reaction'),
-                1 if turn.get('is_completed', False) else 0,
-                1 if turn.get('is_successful', True) else 0,
-                now, now
+                template['template_key'],
+                template['name'],
+                template['description'],
+                template['default_alignment'],
+                template['recommended_wrestling_style'],
+                template['base_popularity_modifier'],
+                json.dumps(template['attributes_json']),
+                now,
+                now,
             ))
 
-            # Save segments
-            for segment in turn.get('segments', []):
-                cursor.execute('''
-                    INSERT INTO turn_segments (
-                        turn_id, segment_id, show_id, show_name,
-                        year, week, segment_type, description,
-                        crowd_reaction, crowd_heat_level, turn_progress,
-                        created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    turn['id'],
-                    segment['segment_id'],
-                    segment['show_id'],
-                    segment['show_name'],
-                    segment['year'],
-                    segment['week'],
-                    segment['segment_type'],
-                    segment['description'],
-                    segment['crowd_reaction'],
-                    segment['crowd_heat_level'],
-                    segment.get('turn_progress', 0),
-                    now
-                ))
-
         self.conn.commit()
 
-    def load_turn_state(self) -> Dict[str, Any]:
-        """Load turn manager state"""
+    def _create_vanguard_development_tables(self) -> None:
+        """Create normalized tables for ROC Vanguard and GM progression systems."""
         cursor = self.conn.cursor()
 
-        cursor.execute('SELECT * FROM wrestler_turns ORDER BY start_year, start_week')
-        rows = cursor.fetchall()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS brand_metadata (
+                brand_name TEXT PRIMARY KEY,
+                brand_tier TEXT NOT NULL,
+                prestige_level INTEGER NOT NULL DEFAULT 50,
+                roster_capacity INTEGER NOT NULL DEFAULT 40,
+                revenue_tier TEXT NOT NULL DEFAULT 'regional',
+                audience_profile TEXT NOT NULL DEFAULT '{}',
+                development_focus TEXT NOT NULL DEFAULT '[]',
+                parent_brand TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+        ''')
 
-        turns = []
-        for row in rows:
-            turn_dict = dict(row)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wrestler_evaluations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wrestler_id TEXT NOT NULL,
+                brand_name TEXT NOT NULL DEFAULT 'ROC Vanguard',
+                evaluation_year INTEGER NOT NULL,
+                evaluation_week INTEGER NOT NULL,
+                in_ring_score INTEGER NOT NULL,
+                promo_score INTEGER NOT NULL,
+                character_score INTEGER NOT NULL,
+                crowd_reaction_score INTEGER NOT NULL,
+                aggregate_readiness_score INTEGER NOT NULL,
+                readiness_status TEXT NOT NULL,
+                scout_notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
 
-            # Parse JSON fields
-            turn_dict['target_wrestler_ids'] = json.loads(turn_dict['target_wrestler_ids'] or '[]')
-            turn_dict['target_wrestler_names'] = json.loads(turn_dict['target_wrestler_names'] or '[]')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS call_up_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wrestler_id TEXT NOT NULL,
+                destination_brand TEXT NOT NULL,
+                decision_status TEXT NOT NULL,
+                decision_score INTEGER NOT NULL,
+                performance_score INTEGER NOT NULL,
+                creative_fit_score INTEGER NOT NULL,
+                timing_score INTEGER NOT NULL,
+                brand_need_score INTEGER NOT NULL,
+                buzz_score INTEGER NOT NULL,
+                decision_reason TEXT,
+                target_year INTEGER,
+                target_week INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
 
-            # Convert boolean integers
-            turn_dict['is_completed'] = bool(turn_dict['is_completed'])
-            turn_dict['is_successful'] = bool(turn_dict['is_successful'])
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trial_appearances (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wrestler_id TEXT NOT NULL,
+                destination_brand TEXT NOT NULL,
+                trial_type TEXT NOT NULL,
+                start_year INTEGER NOT NULL,
+                start_week INTEGER NOT NULL,
+                planned_appearances INTEGER NOT NULL,
+                completed_appearances INTEGER NOT NULL DEFAULT 0,
+                crowd_reaction_score INTEGER DEFAULT 50,
+                match_quality_score INTEGER DEFAULT 50,
+                social_buzz_score INTEGER DEFAULT 50,
+                outcome TEXT NOT NULL DEFAULT 'active',
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
 
-            # Get segments
-            cursor.execute('SELECT * FROM turn_segments WHERE turn_id = ? ORDER BY created_at', (turn_dict['id'],))
-            turn_dict['segments'] = [dict(seg) for seg in cursor.fetchall()]
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS call_ups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wrestler_id TEXT NOT NULL,
+                source_brand TEXT NOT NULL DEFAULT 'ROC Vanguard',
+                destination_brand TEXT NOT NULL,
+                call_up_type TEXT NOT NULL DEFAULT 'solo',
+                announcement_method TEXT NOT NULL DEFAULT 'general_manager_announcement',
+                debut_scenario TEXT NOT NULL DEFAULT 'planned_match_debut',
+                debut_year INTEGER NOT NULL,
+                debut_week INTEGER NOT NULL,
+                first_feud_target_id TEXT,
+                first_feud_title TEXT,
+                trajectory_status TEXT NOT NULL DEFAULT 'test_run',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id)
+            );
+        ''')
 
-            # Remove database fields
-            if 'created_at' in turn_dict:
-                del turn_dict['created_at']
-            if 'updated_at' in turn_dict:
-                del turn_dict['updated_at']
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS failed_call_ups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wrestler_id TEXT NOT NULL,
+                original_call_up_id INTEGER,
+                failure_reason TEXT NOT NULL,
+                response_option TEXT NOT NULL,
+                comeback_phase TEXT NOT NULL DEFAULT 'rock_bottom',
+                reinvention_notes TEXT,
+                second_call_up_ready INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (wrestler_id) REFERENCES wrestlers(id),
+                FOREIGN KEY (original_call_up_id) REFERENCES call_ups(id)
+            );
+        ''')
 
-            turns.append(turn_dict)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS general_managers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                gm_name TEXT NOT NULL UNIQUE,
+                current_brand TEXT NOT NULL,
+                gm_tier TEXT NOT NULL,
+                background TEXT NOT NULL DEFAULT 'former_wrestler',
+                character_type TEXT NOT NULL DEFAULT 'fair_but_firm',
+                mic_skill INTEGER NOT NULL DEFAULT 60,
+                screen_presence INTEGER NOT NULL DEFAULT 60,
+                crisis_management INTEGER NOT NULL DEFAULT 60,
+                political_navigation INTEGER NOT NULL DEFAULT 50,
+                executive_satisfaction INTEGER NOT NULL DEFAULT 50,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+        ''')
 
-        return {
-            'total_turns': len(turns),
-            'active_turns': len([t for t in turns if not t['is_completed']]),
-            'completed_turns': len([t for t in turns if t['is_completed']]),
-            'successful_turns': len([t for t in turns if t['is_completed'] and t['is_successful']]),
-            'turns': turns
-        }
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS gm_evaluations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                gm_id INTEGER NOT NULL,
+                evaluation_year INTEGER NOT NULL,
+                evaluation_week INTEGER NOT NULL,
+                show_performance INTEGER NOT NULL,
+                crisis_management INTEGER NOT NULL,
+                authority_presence INTEGER NOT NULL,
+                locker_room_control INTEGER NOT NULL,
+                political_alignment INTEGER NOT NULL,
+                aggregate_score INTEGER NOT NULL,
+                promotion_eligible INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (gm_id) REFERENCES general_managers(id)
+            );
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS gm_promotions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                gm_id INTEGER NOT NULL,
+                from_brand TEXT NOT NULL,
+                to_brand TEXT NOT NULL,
+                promotion_status TEXT NOT NULL DEFAULT 'shadowing',
+                shadow_start_year INTEGER,
+                shadow_start_week INTEGER,
+                shadow_duration_weeks INTEGER NOT NULL DEFAULT 6,
+                decision_reason TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (gm_id) REFERENCES general_managers(id)
+            );
+        ''')
+
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_eval_wrestler_week ON wrestler_evaluations(wrestler_id, evaluation_year, evaluation_week)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_eval_brand_status ON wrestler_evaluations(brand_name, readiness_status)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_call_up_decisions_status ON call_up_decisions(decision_status, destination_brand)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_trials_wrestler_outcome ON trial_appearances(wrestler_id, outcome)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_call_ups_destination ON call_ups(destination_brand, debut_year, debut_week)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_failed_callups_phase ON failed_call_ups(comeback_phase)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_gm_brand_tier ON general_managers(current_brand, gm_tier)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_gm_evals_gm_week ON gm_evaluations(gm_id, evaluation_year, evaluation_week)')
+
+        now = datetime.now().isoformat()
+        brands = [
+            ('ROC Vanguard', 'developmental', 45, 42, 'developmental', '["in_ring", "promo", "character", "crowd_connection"]', None),
+            ('ROC Alpha', 'main_roster', 90, 55, 'global', '["main_event", "media", "premium_sponsors"]', 'ROC Vanguard'),
+            ('ROC Velocity', 'main_roster', 82, 50, 'national', '["workrate", "weekly_tv", "rising_stars"]', 'ROC Vanguard'),
+        ]
+        cursor.executemany('''
+            INSERT OR IGNORE INTO brand_metadata (
+                brand_name, brand_tier, prestige_level, roster_capacity,
+                revenue_tier, development_focus, parent_brand, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', [(name, tier, prestige, cap, revenue, focus, parent, now, now) for name, tier, prestige, cap, revenue, focus, parent in brands])
+
+        self.conn.commit()
+        print("âœ… Vanguard developmental and GM promotion tables created")

@@ -502,9 +502,24 @@ class CreativeDirector:
         
         # Opening promo (if no hot match)
         if not any(m.get('importance') == 'high_drama' for m in matches[:1]):
+            opening_participants = []
+            if matches:
+                match_participants = matches[0].get('participants', [])
+                for participant in match_participants:
+                    if isinstance(participant, list):
+                        opening_participants.extend(participant[:1])
+                    elif isinstance(participant, dict):
+                        opening_participants.extend([
+                            participant.get('male'),
+                            participant.get('female')
+                        ])
+                    else:
+                        opening_participants.append(participant)
+                opening_participants = [pid for pid in opening_participants if pid][:2]
+
             segments.append({
                 'segment_type': 'promo',
-                'participants': [],  # GM or authority figure
+                'participants': opening_participants,
                 'duration': 5,
                 'position': 0,
                 'purpose': 'hype_match',
